@@ -3,6 +3,7 @@ credentials.json
 .flask_secret
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 

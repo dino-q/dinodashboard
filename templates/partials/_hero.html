@@ -4,7 +4,7 @@
     <!-- Left: Preview -->
     <div class="featured-preview">
       {% if hero.screenshot %}
-        <img src="{{ url_for('static', filename=hero.screenshot) }}"
+        <img src="{{ hero.screenshot if hero.screenshot.startswith('http') else url_for('static', filename=hero.screenshot) }}"
              alt="{{ hero.name }}" class="featured-img" loading="lazy">
       {% else %}
         <div class="featured-terminal">

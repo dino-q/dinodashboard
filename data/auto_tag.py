@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from data.tools import load_raw, save_raw
+from data.supabase_client import get_client
+from data.tools import load_tools
 
 # Automation root on Linux host (mapped from Windows: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution)
 AUTOMATION_ROOT = Path("/app")
@@ -216,9 +218,9 @@ def scan_tool(path: Path) -> set[str]:
 
 def scan_all_tools() -> list[dict[str, Any]]:
     """Dry-run scan: returns diff per tool without writing."""
-    data = load_raw()
+    tools = load_tools()
     results: list[dict[str, Any]] = []
-    for tool in data.get("tools", []):
+    for tool in tools:
         local = to_local_path(tool.get("path", ""))
         if local is None or not local.exists():
             results.append({
@@ -245,14 +247,16 @@ def scan_all_tools() -> list[dict[str, Any]]:
 
 def auto_tag_all(apply: bool = False) -> dict[str, Any]:
     """Scan every tool's path + merge detected tech tags into tags array.
-    Returns summary dict with tool-level results.  If apply=True, saves to YAML.
+    Returns summary dict with tool-level results. If apply=True, writes the
+    updated tags back to Supabase (per-tool UPDATE, only rows that changed).
     """
-    data = load_raw()
+    tools = load_tools()
     tools_changed = 0
     tag_additions_total = 0
     per_tool: list[dict[str, Any]] = []
+    updates: list[tuple[str, list[str]]] = []  # (tool_id, new_tags) for writeback
 
-    for tool in data.get("tools", []):
+    for tool in tools:
         local = to_local_path(tool.get("path", ""))
         if local is None or not local.exists():
             per_tool.append({
@@ -272,9 +276,9 @@ def auto_tag_all(apply: bool = False) -> dict[str, Any]:
                 added.append(t)
 
         if added:
-            tool["tags"] = existing
             tools_changed += 1
             tag_additions_total += len(added)
+            updates.append((tool["id"], existing))
 
         per_tool.append({
             "id": tool["id"], "status": "ok",
@@ -290,7 +294,10 @@ def auto_tag_all(apply: bool = False) -> dict[str, Any]:
         "tools_scanned": scanned,
         "per_tool": per_tool,
     }
-    if apply and tools_changed > 0:
-        save_raw(data)
+    if apply and updates:
+        sb = get_client()
+        today = str(date.today())
+        for tool_id, new_tags in updates:
+            sb.table("tools").update({"tags": new_tags, "updated_at": today}).eq("id", tool_id).execute()
         summary["written"] = True
     return summary

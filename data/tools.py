@@ -1,178 +1,62 @@
 """
-tools.yaml CRUD operations.
+Tools / categories / env_types / quick_inputs — Supabase-backed CRUD.
+
+對外 API 跟原本的 YAML 版本一模一樣，讓 routes/api.py 完全不用改。
 """
-import os
 import re
 from datetime import date
 
-import yaml
-
-from config import TOOLS_YAML
-
-# ------------------------------------------------------------------
-# Raw YAML read / write
-# ------------------------------------------------------------------
-
-def load_raw() -> dict:
-    with open(TOOLS_YAML, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {"tools": [], "categories": []}
-
-
-def save_raw(data: dict) -> None:
-    with open(TOOLS_YAML, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+from data.supabase_client import get_client
 
 
 # ------------------------------------------------------------------
-# Read helpers
+# Shared helpers
+# ------------------------------------------------------------------
+
+def _sb():
+    return get_client()
+
+
+def _cat_row_to_dict(row: dict) -> dict:
+    """DB 的 sort_order → API 的 order（對外相容）"""
+    return {
+        "id": row["id"],
+        "name_zh": row.get("name_zh", ""),
+        "icon": row.get("icon", "folder"),
+        "order": row.get("sort_order", 99),
+    }
+
+
+# ------------------------------------------------------------------
+# Categories
+# ------------------------------------------------------------------
+
+def load_categories() -> list[dict]:
+    res = _sb().table("categories").select("*").order("sort_order").execute()
+    return [_cat_row_to_dict(r) for r in (res.data or [])]
+
+
+# ------------------------------------------------------------------
+# Tools
 # ------------------------------------------------------------------
 
 def load_tools() -> list[dict]:
-    return load_raw().get("tools", [])
-
-
-def load_categories() -> list[dict]:
-    data = load_raw()
-    cats = data.get("categories", [])
-    return sorted(cats, key=lambda c: c.get("order", 99))
+    res = (_sb().table("tools").select("*").order("sort_order").execute())
+    return list(res.data or [])
 
 
 def get_tool(tool_id: str) -> dict | None:
-    for t in load_tools():
-        if t["id"] == tool_id:
-            return t
-    return None
-
-
-DEFAULT_ENV_TYPES = ["local", "docker", "bat", "github"]
-
-
-def load_env_types() -> list[str]:
-    """Global list of launch-command env types. Seeded with defaults, augmented by custom types."""
-    data = load_raw()
-    types = data.get("env_types")
-    if types is None:
-        types = list(DEFAULT_ENV_TYPES)
-        data["env_types"] = types
-        save_raw(data)
-    # Ensure all defaults present (in case user removed one)
-    for d in DEFAULT_ENV_TYPES:
-        if d not in types:
-            types.append(d)
-    # Also merge any env currently in use that isn't in the list (for older yaml)
-    used = set()
-    for t in data.get("tools", []):
-        for c in t.get("commands", []):
-            e = c.get("env")
-            if e:
-                used.add(e)
-    added = False
-    for e in used:
-        if e not in types:
-            types.append(e)
-            added = True
-    if added:
-        data["env_types"] = types
-        save_raw(data)
-    return types
-
-
-def add_env_type(name: str) -> bool:
-    if not name:
-        return False
-    data = load_raw()
-    types = data.setdefault("env_types", list(DEFAULT_ENV_TYPES))
-    if name in types:
-        return False
-    types.append(name)
-    save_raw(data)
-    return True
-
-
-def remove_env_type(name: str) -> bool:
-    if name in DEFAULT_ENV_TYPES:
-        return False
-    data = load_raw()
-    types = data.get("env_types", [])
-    if name not in types:
-        return False
-    types.remove(name)
-    save_raw(data)
-    return True
-
-
-# Seed presets — used when tools.yaml has no `quick_inputs` key yet. Matches the
-# previously-hardcoded ENV_DEFAULT_LABELS in dashboard.js so "change env → auto-fill
-# label" behavior is preserved.
-_QUICK_INPUT_SEED = [
-    {"env": "local",   "label": "啟動 Dev Server", "cmd": ""},
-    {"env": "bat",     "label": "啟動 Bat",        "cmd": ""},
-    {"env": "github",  "label": "Github_Repo",     "cmd": ""},
-    {"env": "Notion",  "label": "Notion",          "cmd": ""},
-    {"env": "Netlify", "label": "Netlify",         "cmd": ""},
-    {"env": "gas",     "label": "GAS",             "cmd": ""},
-    {"env": "Google",  "label": "啟動 sheet",      "cmd": ""},
-]
-
-
-def load_quick_inputs() -> list[dict]:
-    """Presets used to quickly populate the Launch Commands editor.
-    Returns seed defaults the first time (no `quick_inputs` key in yaml yet)."""
-    data = load_raw()
-    raw = data.get("quick_inputs")
-    if raw is None:
-        return [dict(x) for x in _QUICK_INPUT_SEED]
-    out = []
-    for it in raw:
-        if not isinstance(it, dict):
-            continue
-        out.append({
-            "env": (it.get("env") or "local").strip(),
-            "label": (it.get("label") or "").strip(),
-            "cmd": (it.get("cmd") or "").strip(),
-        })
-    return out
-
-
-def save_quick_input_settings(env_types: list[str], quick_inputs: list[dict]) -> None:
-    """Overwrite env_types + quick_inputs in tools.yaml in one pass."""
-    data = load_raw()
-
-    # Normalize env types — keep defaults, preserve order, drop blanks/dups
-    cleaned_env = []
-    seen = set()
-    for name in env_types or []:
-        n = (name or "").strip()
-        if not n or n in seen:
-            continue
-        seen.add(n)
-        cleaned_env.append(n)
-    for d in DEFAULT_ENV_TYPES:
-        if d not in seen:
-            cleaned_env.append(d)
-            seen.add(d)
-
-    cleaned_qi = []
-    for it in quick_inputs or []:
-        if not isinstance(it, dict):
-            continue
-        env = (it.get("env") or "").strip() or "local"
-        label = (it.get("label") or "").strip()
-        cmd = (it.get("cmd") or "").strip()
-        if not label and not cmd:
-            continue
-        cleaned_qi.append({"env": env, "label": label, "cmd": cmd})
-
-    data["env_types"] = cleaned_env
-    data["quick_inputs"] = cleaned_qi
-    save_raw(data)
+    if not tool_id:
+        return None
+    res = _sb().table("tools").select("*").eq("id", tool_id).limit(1).execute()
+    rows = res.data or []
+    return rows[0] if rows else None
 
 
 def get_highlight_tool() -> dict | None:
-    for t in load_tools():
-        if t.get("highlight"):
-            return t
-    return None
+    res = _sb().table("tools").select("*").eq("highlight", True).limit(1).execute()
+    rows = res.data or []
+    return rows[0] if rows else None
 
 
 def filter_tools(category: str | None = None, q: str | None = None,
@@ -180,12 +64,15 @@ def filter_tools(category: str | None = None, q: str | None = None,
                  has_external: bool = False, has_local_url: bool = False,
                  has_notion: bool = False, has_github: bool = False,
                  has_gas: bool = False) -> list[dict]:
-    tools = load_tools()
+    # 用 SQL-side 過濾簡單條件，複雜條件（tag 搜尋、commands env 過濾）用 Python 端
+    query = _sb().table("tools").select("*").order("sort_order")
     if status:
-        tools = [t for t in tools if t.get("status") == status]
+        query = query.eq("status", status)
     if category:
-        tools = [t for t in tools if t.get("category") == category]
-    # "has_*" filters — OR logic: show tools matching ANY enabled criterion
+        query = query.eq("category", category)
+    tools = list(query.execute().data or [])
+
+    # has_* filters (OR logic)
     has_any = any([has_external, has_local_url, has_notion, has_github, has_gas])
     if has_any:
         def _has_env(tool, env_name):
@@ -203,16 +90,16 @@ def filter_tools(category: str | None = None, q: str | None = None,
             if has_gas and _has_env(t, "gas"):
                 return True
             return False
-
         tools = [t for t in tools if matches(t)]
+
     if q:
         q_lower = q.lower()
         tools = [
             t for t in tools
-            if q_lower in t.get("name", "").lower()
-            or q_lower in t.get("name_zh", "").lower()
-            or q_lower in t.get("description", "").lower()
-            or any(q_lower in tag.lower() for tag in t.get("tags", []))
+            if q_lower in (t.get("name") or "").lower()
+            or q_lower in (t.get("name_zh") or "").lower()
+            or q_lower in (t.get("description") or "").lower()
+            or any(q_lower in str(tag).lower() for tag in (t.get("tags") or []))
         ]
     return tools
 
@@ -222,7 +109,6 @@ def tools_grouped_by_category(category: str | None = None, q: str | None = None,
                               has_external: bool = False, has_local_url: bool = False,
                               has_notion: bool = False, has_github: bool = False,
                               has_gas: bool = False) -> list[dict]:
-    """Return categories with their tools, for display grouping."""
     tools = filter_tools(category, q, status, has_external, has_local_url,
                          has_notion, has_github, has_gas)
     categories = load_categories()
@@ -230,8 +116,6 @@ def tools_grouped_by_category(category: str | None = None, q: str | None = None,
         categories = [c for c in categories if c["id"] == category]
 
     groups = []
-
-    # Prepend 常用工具 (starred) — only when not filtering by category
     if not category:
         starred = [t for t in tools if t.get("starred") and not t.get("highlight")]
         if starred:
@@ -245,7 +129,6 @@ def tools_grouped_by_category(category: str | None = None, q: str | None = None,
         if cat_tools:
             groups.append({"category": cat, "tools": cat_tools})
 
-    # Uncategorized
     known_ids = {c["id"] for c in categories}
     uncategorized = [t for t in tools if t.get("category") not in known_ids and not t.get("highlight")]
     if uncategorized:
@@ -257,18 +140,145 @@ def tools_grouped_by_category(category: str | None = None, q: str | None = None,
 
 
 # ------------------------------------------------------------------
-# Write helpers
+# env_types
 # ------------------------------------------------------------------
 
-def _slugify(name: str) -> str:
-    s = name.lower().strip()
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"[\s_]+", "-", s)
-    return s.strip("-")[:60]
+DEFAULT_ENV_TYPES = ["local", "docker", "bat", "github"]
 
 
-def _ensure_category(data: dict, form: dict) -> str:
-    """If form has new category fields, create it and return its id."""
+def load_env_types() -> list[str]:
+    """讀 env_types 表；若缺預設值自動補"""
+    sb = _sb()
+    res = sb.table("env_types").select("*").order("sort_order").execute()
+    names = [r["name"] for r in (res.data or [])]
+
+    # 補預設值
+    existing = set(names)
+    to_add = [n for n in DEFAULT_ENV_TYPES if n not in existing]
+    if to_add:
+        next_order = len(names)
+        rows = [{"name": n, "sort_order": next_order + i} for i, n in enumerate(to_add)]
+        sb.table("env_types").insert(rows).execute()
+        names.extend(to_add)
+
+    # 也把各工具 commands 裡出現但未登記的 env 補上
+    tools = load_tools()
+    used = set()
+    for t in tools:
+        for c in t.get("commands") or []:
+            e = c.get("env")
+            if e:
+                used.add(e)
+    missing = used - set(names)
+    if missing:
+        next_order = len(names)
+        rows = [{"name": n, "sort_order": next_order + i} for i, n in enumerate(sorted(missing))]
+        sb.table("env_types").insert(rows).execute()
+        names.extend(sorted(missing))
+
+    return names
+
+
+def add_env_type(name: str) -> bool:
+    name = (name or "").strip()
+    if not name:
+        return False
+    sb = _sb()
+    existing = sb.table("env_types").select("name").eq("name", name).execute().data or []
+    if existing:
+        return False
+    # 找最後一個 sort_order
+    res = sb.table("env_types").select("sort_order").order("sort_order", desc=True).limit(1).execute()
+    next_order = (res.data[0]["sort_order"] + 1) if res.data else 0
+    sb.table("env_types").insert({"name": name, "sort_order": next_order}).execute()
+    return True
+
+
+def remove_env_type(name: str) -> bool:
+    if name in DEFAULT_ENV_TYPES:
+        return False
+    sb = _sb()
+    res = sb.table("env_types").delete().eq("name", name).execute()
+    return bool(res.data)
+
+
+# ------------------------------------------------------------------
+# quick_inputs
+# ------------------------------------------------------------------
+
+_QUICK_INPUT_SEED = [
+    {"env": "local",   "label": "啟動 Dev Server", "cmd": ""},
+    {"env": "bat",     "label": "啟動 Bat",        "cmd": ""},
+    {"env": "github",  "label": "Github_Repo",     "cmd": ""},
+    {"env": "Notion",  "label": "Notion",          "cmd": ""},
+    {"env": "Netlify", "label": "Netlify",         "cmd": ""},
+    {"env": "gas",     "label": "GAS",             "cmd": ""},
+    {"env": "Google",  "label": "啟動 sheet",      "cmd": ""},
+]
+
+
+def load_quick_inputs() -> list[dict]:
+    sb = _sb()
+    res = sb.table("quick_inputs").select("*").order("sort_order").execute()
+    rows = res.data or []
+    if not rows:
+        # 第一次跑時回傳 seed，不寫回 DB（讓使用者手動存才寫）
+        return [dict(x) for x in _QUICK_INPUT_SEED]
+    return [{
+        "env": (r.get("env") or "local").strip(),
+        "label": (r.get("label") or "").strip(),
+        "cmd": (r.get("cmd") or "").strip(),
+    } for r in rows]
+
+
+def save_quick_input_settings(env_types: list[str], quick_inputs: list[dict]) -> None:
+    """一次覆寫 env_types + quick_inputs。"""
+    sb = _sb()
+
+    # 清理 env_types — 保留預設、去空白去重
+    cleaned_env = []
+    seen = set()
+    for name in env_types or []:
+        n = (name or "").strip()
+        if not n or n in seen:
+            continue
+        seen.add(n)
+        cleaned_env.append(n)
+    for d in DEFAULT_ENV_TYPES:
+        if d not in seen:
+            cleaned_env.append(d)
+            seen.add(d)
+
+    # 清空 env_types 再灌入
+    sb.table("env_types").delete().neq("name", "__sentinel__").execute()
+    if cleaned_env:
+        rows = [{"name": n, "sort_order": i} for i, n in enumerate(cleaned_env)]
+        sb.table("env_types").insert(rows).execute()
+
+    # quick_inputs
+    cleaned_qi = []
+    for it in quick_inputs or []:
+        if not isinstance(it, dict):
+            continue
+        env = (it.get("env") or "").strip() or "local"
+        label = (it.get("label") or "").strip()
+        cmd = (it.get("cmd") or "").strip()
+        if not label and not cmd:
+            continue
+        cleaned_qi.append({"env": env, "label": label, "cmd": cmd})
+
+    sb.table("quick_inputs").delete().gte("id", 0).execute()
+    if cleaned_qi:
+        rows = [{**it, "sort_order": i} for i, it in enumerate(cleaned_qi)]
+        sb.table("quick_inputs").insert(rows).execute()
+
+
+# ------------------------------------------------------------------
+# CRUD: tools
+# ------------------------------------------------------------------
+
+def _ensure_category(form: dict) -> str:
+    """若 form 填了新分類欄位，幫他建一筆分類並回傳 id。"""
     cat_id = form.get("category", "utility")
     if cat_id != "__new__":
         return cat_id
@@ -277,27 +287,39 @@ def _ensure_category(data: dict, form: dict) -> str:
     new_icon = form.get("new_cat_icon", "").strip() or "folder"
     if not new_id or not new_name:
         return "utility"
-    cats = data.setdefault("categories", [])
-    if not any(c["id"] == new_id for c in cats):
-        max_order = max((c.get("order", 0) for c in cats), default=0)
-        cats.append({"id": new_id, "name_zh": new_name, "icon": new_icon, "order": max_order + 1})
+
+    sb = _sb()
+    existing = sb.table("categories").select("id").eq("id", new_id).execute().data or []
+    if not existing:
+        # 拿目前最大 sort_order
+        res = sb.table("categories").select("sort_order").order("sort_order", desc=True).limit(1).execute()
+        next_order = (res.data[0]["sort_order"] + 1) if res.data else 1
+        sb.table("categories").insert({
+            "id": new_id, "name_zh": new_name, "icon": new_icon, "sort_order": next_order
+        }).execute()
     return new_id
 
 
 def add_tool(form: dict) -> dict:
-    data = load_raw()
+    sb = _sb()
     tool_id = form.get("id") or _slugify(form.get("name", "tool"))
 
-    # Ensure unique id
-    existing_ids = {t["id"] for t in data.get("tools", [])}
+    # 確保 id 唯一
+    existing_ids = {r["id"] for r in (sb.table("tools").select("id").execute().data or [])}
     base_id = tool_id
     counter = 2
     while tool_id in existing_ids:
         tool_id = f"{base_id}-{counter}"
         counter += 1
 
-    category = _ensure_category(data, form)
+    category = _ensure_category(form)
     today = str(date.today())
+
+    # 新增到最後一個 sort_order
+    res = sb.table("tools").select("sort_order").order("sort_order", desc=True).limit(1).execute()
+    next_order = (res.data[0]["sort_order"] + 1) if res.data else 0
+
+    commands = _parse_commands(form)
     tool = {
         "id": tool_id,
         "name": form.get("name", ""),
@@ -311,87 +333,72 @@ def add_tool(form: dict) -> dict:
         "highlight": form.get("highlight") == "on",
         "screenshot": form.get("screenshot", ""),
         "path": form.get("path", ""),
-        "commands": _parse_commands(form),
+        "commands": commands,
         "url": form.get("url", ""),
         "external_url": form.get("external_url", ""),
         "pin_path": form.get("pin_path") == "on",
         "pin_url": form.get("pin_url") == "on",
         "pin_external_url": form.get("pin_external_url") == "on",
+        "sort_order": next_order,
         "created_at": today,
         "updated_at": today,
     }
-    # Sync any new env types into the global list
-    env_types = data.setdefault("env_types", list(DEFAULT_ENV_TYPES))
-    for cmd in tool["commands"]:
-        if cmd.get("env") and cmd["env"] not in env_types:
-            env_types.append(cmd["env"])
-    data.setdefault("tools", []).append(tool)
-    save_raw(data)
-    return tool
+    res = sb.table("tools").insert(tool).execute()
+    _sync_env_types_from_commands(commands)
+    return res.data[0] if res.data else tool
 
 
 def update_tool(tool_id: str, form: dict) -> dict | None:
-    data = load_raw()
-    category = _ensure_category(data, form)
-    for i, t in enumerate(data.get("tools", [])):
-        if t["id"] == tool_id:
-            t["name"] = form.get("name", t["name"])
-            t["name_zh"] = form.get("name_zh", t.get("name_zh", ""))
-            t["description"] = form.get("description", t["description"])
-            t["category"] = category
-            t["tags"] = _parse_tags(form.get("tags", ",".join(t.get("tags", []))))
-            t["icon"] = form.get("icon", t.get("icon", "box"))
-            t["color"] = form.get("color", t.get("color", "#6366F1"))
-            t["status"] = form.get("status", t.get("status", "active"))
-            if "highlight" in form:
-                t["highlight"] = form.get("highlight") == "on"
-            t["screenshot"] = form.get("screenshot", t.get("screenshot", ""))
-            t["path"] = form.get("path", t.get("path", ""))
-            t["commands"] = _parse_commands(form)
-            t["url"] = form.get("url", t.get("url", ""))
-            t["external_url"] = form.get("external_url", t.get("external_url", ""))
-            t["pin_path"] = form.get("pin_path") == "on"
-            t["pin_url"] = form.get("pin_url") == "on"
-            t["pin_external_url"] = form.get("pin_external_url") == "on"
-            t["updated_at"] = str(date.today())
-            data["tools"][i] = t
-            # Sync any new env types into the global list
-            env_types = data.setdefault("env_types", list(DEFAULT_ENV_TYPES))
-            for cmd in t["commands"]:
-                if cmd.get("env") and cmd["env"] not in env_types:
-                    env_types.append(cmd["env"])
-            save_raw(data)
-            return t
-    return None
+    sb = _sb()
+    existing = get_tool(tool_id)
+    if not existing:
+        return None
+
+    category = _ensure_category(form)
+    commands = _parse_commands(form)
+
+    patch = {
+        "name": form.get("name", existing["name"]),
+        "name_zh": form.get("name_zh", existing.get("name_zh", "")),
+        "description": form.get("description", existing["description"]),
+        "category": category,
+        "tags": _parse_tags(form.get("tags", ",".join(existing.get("tags") or []))),
+        "icon": form.get("icon", existing.get("icon", "box")),
+        "color": form.get("color", existing.get("color", "#6366F1")),
+        "status": form.get("status", existing.get("status", "active")),
+        "screenshot": form.get("screenshot", existing.get("screenshot", "")),
+        "path": form.get("path", existing.get("path", "")),
+        "commands": commands,
+        "url": form.get("url", existing.get("url", "")),
+        "external_url": form.get("external_url", existing.get("external_url", "")),
+        "pin_path": form.get("pin_path") == "on",
+        "pin_url": form.get("pin_url") == "on",
+        "pin_external_url": form.get("pin_external_url") == "on",
+        "updated_at": str(date.today()),
+    }
+    if "highlight" in form:
+        patch["highlight"] = form.get("highlight") == "on"
+
+    res = sb.table("tools").update(patch).eq("id", tool_id).execute()
+    _sync_env_types_from_commands(commands)
+    return res.data[0] if res.data else None
 
 
 def delete_tool(tool_id: str) -> bool:
-    data = load_raw()
-    before = len(data.get("tools", []))
-    data["tools"] = [t for t in data.get("tools", []) if t["id"] != tool_id]
-    if len(data["tools"]) < before:
-        save_raw(data)
-        return True
-    return False
+    res = _sb().table("tools").delete().eq("id", tool_id).execute()
+    return bool(res.data)
 
 
 def reorder_tool(tool_id: str, before_id: str | None, category: str | None) -> dict | None:
-    """Move tool to appear before before_id (or append to end if None).
-    If category is a real category (not starting with _), also change the tool's category."""
-    data = load_raw()
-    tools = data.get("tools", [])
-
-    tool = None
-    for i, t in enumerate(tools):
-        if t["id"] == tool_id:
-            tool = tools.pop(i)
-            break
+    """把 tool_id 搬到 before_id 前面（None 則放到最後）。同時可換分類。"""
+    sb = _sb()
+    tools = load_tools()
+    tool = next((t for t in tools if t["id"] == tool_id), None)
     if not tool:
         return None
 
-    if category and not category.startswith("_"):
-        tool["category"] = category
-
+    # 移除後重新插入
+    tools = [t for t in tools if t["id"] != tool_id]
     inserted = False
     if before_id:
         for i, t in enumerate(tools):
@@ -402,46 +409,63 @@ def reorder_tool(tool_id: str, before_id: str | None, category: str | None) -> d
     if not inserted:
         tools.append(tool)
 
-    tool["updated_at"] = str(date.today())
-    data["tools"] = tools
-    save_raw(data)
-    return tool
+    # 如有換分類，更新 category
+    patch_cat = None
+    if category and not category.startswith("_") and tool.get("category") != category:
+        patch_cat = category
+        tool["category"] = category
+
+    # 一次性 UPDATE 所有 sort_order 變動；只改有變動的 row
+    today = str(date.today())
+    for i, t in enumerate(tools):
+        new_order = i
+        if t.get("sort_order") != new_order:
+            sb.table("tools").update({"sort_order": new_order, "updated_at": today}).eq("id", t["id"]).execute()
+
+    if patch_cat is not None:
+        sb.table("tools").update({"category": patch_cat, "updated_at": today}).eq("id", tool_id).execute()
+
+    return get_tool(tool_id)
 
 
 def toggle_starred(tool_id: str) -> dict | None:
-    data = load_raw()
-    for t in data.get("tools", []):
-        if t["id"] == tool_id:
-            t["starred"] = not t.get("starred", False)
-            t["updated_at"] = str(date.today())
-            save_raw(data)
-            return t
-    return None
+    sb = _sb()
+    t = get_tool(tool_id)
+    if not t:
+        return None
+    patch = {"starred": not bool(t.get("starred")), "updated_at": str(date.today())}
+    res = sb.table("tools").update(patch).eq("id", tool_id).execute()
+    return res.data[0] if res.data else None
 
 
-def update_screenshot(tool_id: str, filename: str) -> bool:
-    data = load_raw()
-    for t in data.get("tools", []):
-        if t["id"] == tool_id:
-            t["screenshot"] = f"screenshots/{filename}"
-            t["updated_at"] = str(date.today())
-            save_raw(data)
-            return True
-    return False
+def update_screenshot(tool_id: str, url_or_path: str) -> bool:
+    """存截圖的完整公開 URL（從 Supabase Storage 來的）"""
+    patch = {
+        "screenshot": url_or_path,
+        "updated_at": str(date.today()),
+    }
+    res = _sb().table("tools").update(patch).eq("id", tool_id).execute()
+    return bool(res.data)
 
 
 # ------------------------------------------------------------------
-# Internal parse helpers
+# Internal helpers
 # ------------------------------------------------------------------
 
-def _parse_tags(tags_str: str) -> list[str]:
+def _slugify(name: str) -> str:
+    s = name.lower().strip()
+    s = re.sub(r"[^\w\s-]", "", s)
+    s = re.sub(r"[\s_]+", "-", s)
+    return s.strip("-")[:60]
+
+
+def _parse_tags(tags_str) -> list[str]:
     if isinstance(tags_str, list):
         return tags_str
-    return [t.strip() for t in tags_str.split(",") if t.strip()]
+    return [t.strip() for t in str(tags_str or "").split(",") if t.strip()]
 
 
 def _parse_commands(form: dict) -> list[dict]:
-    """Parse dynamic command fields from form: cmd_label_0, cmd_cmd_0, cmd_env_0, ..."""
     commands = []
     i = 0
     while True:
@@ -458,3 +482,21 @@ def _parse_commands(form: dict) -> list[dict]:
             })
         i += 1
     return commands
+
+
+def _sync_env_types_from_commands(commands: list[dict]) -> None:
+    """新工具/修改工具後，把 commands 裡用到的 env 同步進 env_types 表。"""
+    if not commands:
+        return
+    sb = _sb()
+    envs = {c.get("env") for c in commands if c.get("env")}
+    if not envs:
+        return
+    existing = {r["name"] for r in (sb.table("env_types").select("name").execute().data or [])}
+    to_add = envs - existing
+    if not to_add:
+        return
+    res = sb.table("env_types").select("sort_order").order("sort_order", desc=True).limit(1).execute()
+    next_order = (res.data[0]["sort_order"] + 1) if res.data else 0
+    rows = [{"name": n, "sort_order": next_order + i} for i, n in enumerate(sorted(to_add))]
+    sb.table("env_types").insert(rows).execute()

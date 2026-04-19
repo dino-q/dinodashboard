@@ -247,7 +247,7 @@
       <label><span class="zh">截圖</span><span class="en">Screenshot</span></label>
       <div class="screenshot-upload" id="screenshot-upload-{{ tool.id }}">
         {% if tool.screenshot %}
-          <img src="{{ url_for('static', filename=tool.screenshot) }}" class="screenshot-thumb" alt="Current screenshot">
+          <img src="{{ tool.screenshot if tool.screenshot.startswith('http') else url_for('static', filename=tool.screenshot) }}" class="screenshot-thumb" alt="Current screenshot">
         {% endif %}
         <input type="file" accept="image/*"
                onchange="uploadScreenshot('{{ tool.id }}', this)">

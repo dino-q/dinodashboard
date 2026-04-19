@@ -9,9 +9,8 @@ import urllib.request
 import urllib.parse
 
 from flask import Blueprint, request, render_template, make_response, jsonify
-from werkzeug.utils import secure_filename
 
-from config import SCREENSHOTS_DIR
+from data.supabase_client import get_client
 from data.tools import (
     load_tools, load_categories, get_tool, get_highlight_tool,
     tools_grouped_by_category, add_tool, update_tool, delete_tool,
@@ -217,6 +216,12 @@ def delete(tool_id):
 # Screenshot upload
 # ------------------------------------------------------------------
 
+_MIME_BY_EXT = {
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "webp": "image/webp", "gif": "image/gif",
+}
+
+
 @bp.route("/tool/<tool_id>/screenshot", methods=["POST"])
 @editor_required
 def upload_screenshot(tool_id):
@@ -227,18 +232,35 @@ def upload_screenshot(tool_id):
         return jsonify({"error": "Invalid file type"}), 400
 
     ext = f.filename.rsplit(".", 1)[1].lower()
-    filename = f"{tool_id}.{ext}"
-    filepath = SCREENSHOTS_DIR / filename
+    object_key = f"{tool_id}.{ext}"
 
-    # Remove old screenshots with different extensions
-    for old_ext in ALLOWED_EXTENSIONS:
-        old = SCREENSHOTS_DIR / f"{tool_id}.{old_ext}"
-        if old.exists() and old != filepath:
-            old.unlink()
+    sb = get_client()
+    bucket = sb.storage.from_("screenshots")
 
-    f.save(filepath)
-    update_screenshot(tool_id, filename)
-    return jsonify({"ok": True, "path": f"screenshots/{filename}"})
+    # 清掉舊的（不同副檔名會殘留）
+    try:
+        existing = bucket.list() or []
+        to_remove = [o["name"] for o in existing
+                     if o["name"].rsplit(".", 1)[0] == tool_id and o["name"] != object_key]
+        if to_remove:
+            bucket.remove(to_remove)
+    except Exception:
+        pass  # list 失敗不阻擋上傳
+
+    # 上傳（upsert 覆蓋同名）
+    content = f.read()
+    bucket.upload(
+        path=object_key,
+        file=content,
+        file_options={
+            "content-type": _MIME_BY_EXT.get(ext, "application/octet-stream"),
+            "upsert": "true",
+        },
+    )
+    public_url = bucket.get_public_url(object_key)
+
+    update_screenshot(tool_id, public_url)
+    return jsonify({"ok": True, "path": public_url})
 
 
 # ------------------------------------------------------------------

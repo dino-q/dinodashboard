@@ -13,8 +13,12 @@
 
 ## Quick Start
 
-```bash
+**Python 3.13 required** (3.14 breaks `pyiceberg` — no wheel, needs VS Build Tools). Version pinned in `runtime.txt` / `.python-version`.
+
+```powershell
 cd DinoDashboard
+py -3.13 -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python app.py
 # http://localhost:5050

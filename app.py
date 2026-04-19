@@ -1,7 +1,16 @@
 """
 DinoDashboard — Flask Application
 """
+import os
 import secrets
+
+# 本機開發：從 .env 讀 SUPABASE_URL / SUPABASE_SECRET_KEY / FLASK_SECRET_KEY
+# 線上（Render）：直接走 os.environ，python-dotenv 不存在也沒關係
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 from flask import Flask
 
@@ -14,21 +23,29 @@ def create_app():
         template_folder="templates",
         static_folder="static",
     )
-    # Stable secret key per installation (persisted, not hardcoded)
-    secret_file = BASE_DIR / ".flask_secret"
-    if secret_file.exists():
-        app.secret_key = secret_file.read_text().strip()
+
+    # Secret key 來源（優先順序）：
+    #   1. FLASK_SECRET_KEY 環境變數（Render 上用這個）
+    #   2. 本機 .flask_secret 檔（開發環境，git 有 ignore）
+    #   3. 隨機產生（每次重啟都會變；Render 上 session 會失效，不要走到這步）
+    env_key = os.environ.get("FLASK_SECRET_KEY")
+    if env_key:
+        app.secret_key = env_key
     else:
-        key = secrets.token_hex(32)
-        secret_file.write_text(key)
-        app.secret_key = key
+        secret_file = BASE_DIR / ".flask_secret"
+        if secret_file.exists():
+            app.secret_key = secret_file.read_text().strip()
+        else:
+            key = secrets.token_hex(32)
+            try:
+                secret_file.write_text(key)
+            except OSError:
+                # 雲端環境檔案系統唯讀，不寫檔
+                pass
+            app.secret_key = key
 
     app.config["JSON_AS_ASCII"] = False
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
-
-    # Ensure data files exist
-    from data import init_data_files
-    init_data_files()
 
     # Register blueprints
     from routes.auth import bp as auth_bp
@@ -60,6 +77,9 @@ def create_app():
     return app
 
 
+# WSGI 進入點（gunicorn / Render 用）
+app = create_app()
+
+
 if __name__ == "__main__":
-    app = create_app()
     app.run(debug=True, host="127.0.0.1", port=5050)

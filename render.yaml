@@ -1,0 +1,22 @@
+# Render 部署設定檔
+# 在 Render 控制台建立服務時可以勾「使用 Blueprint」自動讀這個檔
+services:
+  - type: web
+    name: dinodashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60 app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: SUPABASE_URL
+        sync: false        # 從 Render Dashboard 手動輸入
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: FLASK_SECRET_KEY
+        generateValue: true   # Render 自動產一把隨機字串
+      - key: PRIVATE_MODE
+        value: "false"
+      - key: ALLOW_REGISTRATION
+        value: "false"     # 上線後不開放自助註冊（避免陌生人建帳號）

@@ -3,11 +3,17 @@ Main route — GET / renders the dashboard.
 """
 from flask import Blueprint, render_template, redirect, url_for
 
-from data.auth import has_credentials
 from data.tools import load_tools, load_categories, get_highlight_tool, tools_grouped_by_category
 from routes.auth import is_private_mode, is_logged_in
 
 bp = Blueprint("main", __name__)
+
+
+# UptimeRobot 每 5 分鐘打一次，讓 Render 免費方案不會進入 sleep。
+# 故意不查 DB、不渲染 template——回傳純文字最省資源也最快。
+@bp.route("/ping")
+def ping():
+    return "ok", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 @bp.route("/")

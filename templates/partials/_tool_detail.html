@@ -14,7 +14,7 @@
   <!-- Screenshot -->
   {% if tool.screenshot %}
     <div class="detail-preview">
-      <img src="{{ url_for('static', filename=tool.screenshot) }}"
+      <img src="{{ tool.screenshot if tool.screenshot.startswith('http') else url_for('static', filename=tool.screenshot) }}"
            alt="{{ tool.name }}" class="detail-img">
     </div>
   {% elif tool.commands %}
