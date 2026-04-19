@@ -653,7 +653,18 @@ function suggestFromZh() {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           col.style.transition = `transform ${duration}s cubic-bezier(0.22, 1, 0.36, 1)`;
-          col.style.transform = `translateY(-${totalSteps * 100}%)`;
+          // iOS only: measure the real span height (px) because flex-stretched
+          // roll-col resolves "100%" to a different value on WebKit-mobile. All
+          // other platforms keep the original percentage path — zero change.
+          if (document.documentElement.classList.contains('is-ios')) {
+            const firstSpan = col.firstElementChild;
+            const stepPx = firstSpan ? firstSpan.getBoundingClientRect().height : 0;
+            col.style.transform = stepPx > 0
+              ? `translateY(-${totalSteps * stepPx}px)`
+              : `translateY(-${totalSteps * 100}%)`;
+          } else {
+            col.style.transform = `translateY(-${totalSteps * 100}%)`;
+          }
         });
       });
     });
