@@ -352,12 +352,10 @@ html { scroll-behavior: smooth; }
   text-align: center;
 }
 
-/* iOS / macOS Safari only — @supports (-webkit-touch-callout) matches Safari. */
-@supports (-webkit-touch-callout: none) {
-  .stat-rolling { height: 1.5em; }
-  .roll-col span { height: 1.5em; line-height: 1.5em; }
-  .stat-item { align-items: flex-end; line-height: 1; }
-}
+/* iOS / iPadOS only — JS adds .is-ios on <html> (modern iPadOS fails @supports detection). */
+.is-ios .stat-rolling { height: 1.5em; }
+.is-ios .roll-col span { height: 1.5em; line-height: 1.5em; }
+.is-ios .stat-item { align-items: flex-end; line-height: 1; }
 
 .stat-label {
   font-size: 13px;

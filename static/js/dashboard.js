@@ -2,6 +2,17 @@
    DinoDashboard — Client-side interactions
    ========================================================================== */
 
+// ---------- Tag iOS / iPadOS early so CSS can target WebKit-mobile specifically ----------
+// @supports (-webkit-touch-callout: none) misses modern iPadOS (presents itself as macOS),
+// so detect explicitly: UA for iPhone/iPad/iPod, plus MacIntel + touch points for iPadOS.
+(() => {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) document.documentElement.classList.add('is-ios');
+})();
+
+
 // ---------- Always land at the top on navigation / login redirect ----------
 // iOS Safari restores scroll position + CSS scroll-snap can latch to the
 // Featured page mid-load, so explicitly reset unless the URL has a hash.
