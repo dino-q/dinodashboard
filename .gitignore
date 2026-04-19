@@ -1,0 +1,31 @@
+# === Secrets / Auth ===
+credentials.json
+.flask_secret
+.env
+.env.*
+*.pem
+*.key
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+
+# === Logs / temp ===
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# === IDE ===
+.vscode/
+.idea/
+
+# === Runtime data (re-generated on startup / user-uploaded) ===
+# Keep .gitkeep so dir exists in repo
+static/screenshots/*
+!static/screenshots/.gitkeep

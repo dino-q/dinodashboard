@@ -1,0 +1,30 @@
+{% for group in groups %}
+  <div class="project-group" id="cat-{{ group.category.id }}">
+    <div class="group-label">
+      <i data-lucide="{{ group.category.icon }}" style="width:18px;height:18px"></i>
+      <span>{{ group.category.name_zh }}</span>
+      <span class="group-count">{{ group.tools | length }}</span>
+    </div>
+    <div class="project-grid">
+      {% for tool in group.tools %}
+        {% include "partials/_tool_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+
+{% if not groups %}
+  <div class="empty-state">
+    <i data-lucide="search-x" style="width:48px;height:48px"></i>
+    <p>
+      <span class="zh">找不到專案</span>
+      <span class="en">No projects found</span>
+    </p>
+    <button class="btn-ghost"
+            hx-get="/api/tools"
+            hx-target="#tool-grid"
+            hx-swap="innerHTML">
+      <span class="zh">顯示全部</span><span class="en">Show all</span>
+    </button>
+  </div>
+{% endif %}

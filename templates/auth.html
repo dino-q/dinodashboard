@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-header">
+      <h1 class="auth-title">DinoDashboard</h1>
+      <p class="auth-subtitle">
+        {% if mode == "setup" %}
+          <span class="zh">首次啟動 — 設定管理員帳密</span>
+          <span class="en">First Run — Create Admin Account</span>
+        {% elif mode == "register" %}
+          <span class="zh">申請新帳號（需管理員核准）</span>
+          <span class="en">Request Account (needs admin approval)</span>
+        {% elif mode == "register_done" %}
+          <span class="zh">申請成功</span>
+          <span class="en">Request submitted</span>
+        {% else %}
+          <span class="zh">登入</span>
+          <span class="en">Sign in</span>
+        {% endif %}
+      </p>
+    </div>
+
+    {% if error %}
+      <div class="auth-error">{{ error }}</div>
+    {% endif %}
+
+    {% if mode == "register_done" %}
+      <div class="auth-success">
+        <p>
+          <span class="zh">帳號「<strong>{{ registered_username }}</strong>」已送出申請，等待管理員核准後即可登入。</span>
+          <span class="en">Account "<strong>{{ registered_username }}</strong>" submitted. An admin must approve before you can sign in.</span>
+        </p>
+      </div>
+      <a href="{{ url_for('auth.login_page') }}" class="btn-primary auth-submit">
+        <span class="zh">返回登入頁</span><span class="en">Back to Login</span>
+      </a>
+    {% else %}
+      <form method="POST" class="auth-form">
+        <div class="form-group">
+          <label for="username">
+            <span class="zh">帳號</span><span class="en">Username</span>
+          </label>
+          <input type="text" name="username" id="username" required autofocus
+                 placeholder="admin">
+        </div>
+
+        <div class="form-group">
+          <label for="password">
+            <span class="zh">密碼</span><span class="en">Password</span>
+          </label>
+          <input type="password" name="password" id="password" required>
+        </div>
+
+        {% if mode == "setup" or mode == "register" %}
+          <div class="form-group">
+            <label for="confirm">
+              <span class="zh">確認密碼</span><span class="en">Confirm Password</span>
+            </label>
+            <input type="password" name="confirm" id="confirm" required>
+          </div>
+        {% endif %}
+
+        <button type="submit" class="btn-primary auth-submit">
+          {% if mode == "setup" %}
+            <span class="zh">建立管理員帳號</span><span class="en">Create Admin</span>
+          {% elif mode == "register" %}
+            <span class="zh">送出申請</span><span class="en">Submit Request</span>
+          {% else %}
+            <span class="zh">登入</span><span class="en">Sign In</span>
+          {% endif %}
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        {% if mode == "login" and allow_register %}
+          <a href="{{ url_for('auth.register_page') }}">
+            <span class="zh">還沒有帳號？ 申請一個</span>
+            <span class="en">No account? Request one</span>
+          </a>
+        {% elif mode == "register" %}
+          <a href="{{ url_for('auth.login_page') }}">
+            <span class="zh">已有帳號？ 登入</span>
+            <span class="en">Already have an account? Sign in</span>
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

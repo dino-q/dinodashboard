@@ -1,0 +1,887 @@
+tools:
+- id: claude-code
+  name: Claude Code (Docker)
+  name_zh: Claude Code 開發環境
+  description: Docker-based Claude Code dev environment with full repo access and
+    AI assistant
+  category: devtool
+  tags:
+  - docker
+  - claude
+  - ai
+  - node
+  - bash
+  - bat
+  - flask
+  - google-apps-script
+  - html
+  - javascript
+  - powershell
+  - puppeteer
+  - python
+  icon: terminal
+  color: '#818cf8'
+  status: active
+  highlight: true
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution
+  commands:
+  - label: 啟動 Docker 環境
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\start-docker.bat
+    env: bat
+  - label: 啟動 n8n + ngrok
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\start-n8n.bat
+    env: local
+  - label: 啟動 TG x Claude
+    cmd: cd C:\Users\AG_Di\Desktop\; claude --channels plugin:telegram@claude-plugins-official
+    env: local
+  - label: CLI_Claude Code (Auto-Permission)
+    cmd: claude --permission-mode auto
+    env: local
+  - label: CLI_Claude Code(Docker環境)
+    cmd: docker run -it --rm -v "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution:/app"
+      -v "C:\Users\AG_Di\AppData\Local\Temp\claude-screenshots:/tmp/claude-screenshots"
+      -w /app my-claude bash -c "su - node -c 'cd /app && npx @anthropic-ai/claude-code
+      --dangerously-skip-permissions'"
+    env: docker
+  url: ''
+  external_url: ''
+  created_at: '2026-04-06'
+  updated_at: '2026-04-18'
+- id: cute-rpg
+  name: Cute RPG Action Shooter
+  name_zh: RPG 射擊遊戲
+  description: 瀏覽器 2D 動作射擊遊戲，支援雙人合作、Boss 戰、技能系統
+  category: game
+  tags:
+  - javascript
+  - vite
+  - canvas
+  - peerjs
+  - bash
+  - bat
+  - html
+  icon: gamepad-2
+  color: '#ef4444'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Game
+  commands:
+  - label: Github_Repo
+    cmd: https://github.com/dino-q/Cute-RPG
+    env: github
+    pinned: false
+  url: http://localhost:5173
+  external_url: https://dino-q.github.io/Cute-RPG/
+  created_at: '2026-03-26'
+  updated_at: '2026-04-18'
+  pin_path: false
+  pin_url: false
+  pin_external_url: true
+- id: dinodashboard
+  name: Dinodashboard
+  name_zh: DinoDashboard儀表板
+  description: Dino真是個小天才、儀表板、工具集中中心
+  category: web-app
+  tags:
+  - dashboard
+  - flask
+  - html
+  - htmx
+  - javascript
+  - python
+  icon: folder-code
+  color: '#ec4899'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\DinoDashboard
+  commands:
+  - label: 啟動 dev server
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\DinoDashboard";
+      pip install -r requirements.txt; python app.py
+    env: local
+    pinned: true
+  - label: Notion
+    cmd: https://www.notion.so/DinoDashboard-34324286a1e88033ae00f523a255f6d9
+    env: Notion
+    pinned: false
+  url: http://localhost:5050
+  external_url: ''
+  pin_path: true
+  pin_url: true
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+  starred: true
+- id: search-popular-games
+  name: Game Scout
+  name_zh: GameScott熱門遊戲排行榜
+  description: Zero-LLM 偵測即將爆紅的遊戲，支援手把友善 & KOL 友善評分
+  category: scraper
+  tags:
+  - python
+  - json
+  - scoring
+  - bat
+  - docker
+  - flask
+  icon: trophy
+  color: '#8b5cf6'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_Popular_games
+  commands:
+  - label: 啟動 bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_Popular_games\
+    env: bat
+    pinned: true
+  - label: 爬取 + 生成儀表板
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_Popular_games";
+      python -m game_scout.main    --now; python generate_dashboard.py; start output\dashboard.html
+    env: local
+    pinned: false
+  - label: 生成結果
+    cmd: file:///C:/Users/AG_Di/Desktop/automation/Claude_code/automatic_evolution/Search_Popular_games/output/dashboard.html
+    env: local
+    pinned: false
+  url: ''
+  external_url: ''
+  created_at: '2026-03-24'
+  updated_at: '2026-04-18'
+  pin_path: true
+  pin_url: false
+  pin_external_url: false
+- id: search-ai-news
+  name: AI News Scraper
+  name_zh: AI 新聞爬蟲
+  description: 自動爬取台灣 AI 新聞 Top 10 + Threads 貼文，自動分類整理
+  category: scraper
+  tags:
+  - python
+  - puppeteer
+  - playwright
+  - bash
+  - bat
+  - beautifulsoup
+  - docker
+  - html
+  - node
+  icon: newspaper
+  color: '#3b82f6'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_AI_news
+  commands:
+  - label: 啟動 bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_AI_news\run_and_sync.bat
+    env: bat
+    pinned: true
+  url: ''
+  external_url: ''
+  created_at: '2026-03-15'
+  updated_at: '2026-04-18'
+  starred: false
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+- id: line-pyautogui
+  name: LINE Desktop Automation
+  name_zh: LINE 一盤散沙自動化 PyautoGUI
+  description: PyAutoGUI 自動匯出 LINE 群組聊天紀錄，整合 NotebookLM 摘要產生
+  category: automation
+  tags:
+  - python
+  - pyautogui
+  - playwright
+  - desktop
+  - bat
+  - html
+  icon: mouse-pointer
+  color: '#f97316'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\LINE_group_PyAutoGUI_NotebookLM
+  commands:
+  - label: 登入NotebookLM
+    cmd: '& "C:\Users\AG_Di\AppData\Roaming\Python\Python314\Scripts\notebooklm.exe"
+      login'
+    env: local
+    pinned: true
+  - label: 執行 (上次→今天)
+    cmd: python "c:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\LINE_group_PyAutoGUI_NotebookLM\line_macro.py"
+      all
+    env: local
+    pinned: true
+  - label: 執行 NotebookLM
+    cmd: python “C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\LINE_group_PyAutoGUI_NotebookLM\line_macro.py"
+      pipeline
+    env: local
+    pinned: true
+  - label: Notion
+    cmd: https://www.notion.so/Line-PyautoGUI-33924286a1e880f4aa5dd9e928a68b8e
+    env: Notion
+    pinned: false
+  url: ''
+  external_url: ''
+  created_at: '2026-04-05'
+  updated_at: '2026-04-18'
+  starred: true
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+- id: line-robot
+  name: LINE Group Bot
+  name_zh: LINE 群組機器人
+  description: LINE 群組訊息管理機器人，支援 webhook 和每日報告
+  category: automation
+  tags:
+  - flask
+  - python
+  - line-api
+  - bat
+  icon: message-circle
+  color: '#22c55e'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\LINE_group_robot
+  commands:
+  - label: 啟動 bot
+    cmd: cd LINE_group_robot && python app.py
+    env: local
+    pinned: false
+  url: ''
+  external_url: ''
+  created_at: '2026-03-21'
+  updated_at: '2026-04-18'
+  pin_path: true
+  pin_url: false
+  pin_external_url: false
+- id: cli-copy-table-tool
+  name: Cli Copy Table Tool
+  name_zh: CLI 複製表格工具
+  description: 可以將CLI中的表格，格式化，方便複製到Notion等軟體編輯
+  category: utility
+  tags:
+  - CLI
+  - notion
+  - html
+  icon: table-2
+  color: '#6366f1'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\CLI_CopyPaste\md-table-to-notion
+  commands:
+  - label: Github_Repo
+    cmd: https://github.com/dino-q/md-table-to-notion
+    env: github
+    pinned: false
+  url: ''
+  external_url: https://dino-q.github.io/md-table-to-notion/
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+  pin_path: false
+  pin_url: false
+  pin_external_url: true
+- id: cli-copypaste
+  name: CLI Copy/Paste Utilities
+  name_zh: CLI 讀取剪貼簿
+  description: Screenshot hooks、Clipboard watcher
+  category: utility
+  tags:
+  - powershell
+  - bash
+  - clipboard
+  - notion
+  - html
+  icon: clipboard-copy
+  color: '#64748b'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\CLI_CopyPaste
+  commands:
+  - label: 自動開啟
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\CLI_CopyPaste\簡易使用說明.txt
+    env: local
+  url: ''
+  external_url: ''
+  created_at: '2026-04-12'
+  updated_at: '2026-04-18'
+- id: notion-project-v3
+  name: Meeting Classifier V3
+  name_zh: 會議紀錄分類系統
+  description: AI 自動分類會議紀錄到對應專案，追蹤待辦事項，整合 Obsidian 知識庫
+  category: web-app
+  tags:
+  - flask
+  - python
+  - htmx
+  - ai
+  - obsidian
+  - bash
+  - chromadb
+  - html
+  - javascript
+  - sentence-transformers
+  icon: clipboard-list
+  color: '#6366f1'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Notion_project_v3
+  commands:
+  - label: 啟動 dev server
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Notion_project_v3";
+      pip install flask pyyaml markdown markupsafe requests; python app.py
+    env: local
+    pinned: true
+  - label: 啟動 臨時網址
+    cmd: cloudflared tunnel --url http://localhost:5001
+    env: local
+    pinned: true
+  - label: Notion
+    cmd: https://www.notion.so/33a24286a1e880df8e62d6ffe13819d9
+    env: Notion
+    pinned: false
+  url: http://localhost:5001
+  external_url: ''
+  created_at: '2026-03-01'
+  updated_at: '2026-04-18'
+  starred: true
+  pin_path: false
+  pin_url: true
+  pin_external_url: false
+- id: gofree-calculator
+  name: GoFree Calculator
+  name_zh: 雅致－貓砂成本計算機
+  description: React 19 + Vite + Tailwind CSS 打造的產品定價計算機
+  category: web-app
+  tags:
+  - react
+  - vite
+  - tailwind
+  - html
+  - javascript
+  - node
+  icon: calculator
+  color: '#f59e0b'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\gofree_calculator
+  commands:
+  - label: 啟動 dev server
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\gofree_calculator";
+      npm run dev
+    env: local
+    pinned: true
+  url: http://localhost:5173
+  external_url: ''
+  created_at: '2026-04-01'
+  updated_at: '2026-04-18'
+  pin_path: true
+  pin_url: true
+  pin_external_url: false
+  starred: false
+- id: chrome-longshot-tool
+  name: Chrome Longshot Tool
+  name_zh: Chrome長截圖工具
+  description: 可以在Google sheet、Claude Artifact、Gmail、Notion等，進行網頁長截圖
+  category: utility
+  tags:
+  - ai
+  - claude
+  - notion
+  - screenshot
+  - html
+  - javascript
+  icon: gallery-vertical-end
+  color: '#0ea5e9'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\chrome_long_screenshot
+  commands:
+  - label: 自動開啟
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\chrome_long_screenshot\使用方法.txt
+    env: local
+    pinned: false
+  url: ''
+  external_url: ''
+  pin_path: true
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: dinosharelink-for-mobile
+  name: Dinosharelink For Mobile
+  name_zh: DinoShareLink (手機版)
+  description: Dino的連結、情報蒐集中心，附手機提醒功能
+  category: web-app
+  tags: []
+  icon: smartphone-charging
+  color: '#3b82f6'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Android studio
+  commands:
+  - label: 程式位置
+    cmd: C:\Users\AG_Di\AndroidStudioProjects\DinoShareLink
+    env: local
+    pinned: false
+  url: ''
+  external_url: ''
+  pin_path: true
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: dinosharelink-web
+  name: Dinosharelink (Web)
+  name_zh: DinoShareLink (網頁版)
+  description: Dino真是個小天才網頁，紀錄連結、待辦事項、同步到手機端
+  category: web-app
+  tags:
+  - html
+  - javascript
+  - typescript
+  icon: monitor-smartphone
+  color: '#f59e0b'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Antigravity\Supabase_Sync
+  commands:
+  - label: 備份網頁
+    cmd: https://dinob.netlify.app/
+    env: local
+    pinned: false
+  - label: Netlify
+    cmd: https://app.netlify.com/projects/dinoq/overview
+    env: Netlify
+    pinned: false
+  - label: Github
+    cmd: https://github.com/dino-q/Calendar_ToDo
+    env: github
+    pinned: false
+  url: ''
+  external_url: https://dinoq.netlify.app/
+  pin_path: true
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+  starred: true
+- id: distributor-management-system
+  name: Distributor Management System
+  name_zh: 經銷商管理系統
+  description: 管理經銷商主檔，快速知道店面結構與經銷商關係
+  category: system
+  tags:
+  - google-apps-script
+  - html
+  - python
+  icon: file-search-corner
+  color: '#ef4444'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Antigravity\Distributor_MainData
+  commands:
+  - label: Google Sheet
+    cmd: https://docs.google.com/spreadsheets/d/1WV6XkWUmlaejVb14N1ifUXJLNy0PskHO3an8hYNNkIg/edit
+    env: Google
+    pinned: false
+  - label: GAS
+    cmd: https://script.google.com/a/macros/aglife.com.tw/s/AKfycbwmvGAjvbXq47bOaZiiJgkl5MsjHIuipQpt3AbGnrNPZs9hLqZBObsHAj4ZRqafdZw/exec
+    env: gas
+    pinned: false
+  - label: Notion
+    cmd: https://www.notion.so/34324286a1e88041a410fb85f8a4e356?source=copy_link
+    env: Notion
+    pinned: false
+  url: ''
+  external_url: https://script.google.com/a/macros/aglife.com.tw/s/AKfycbwmvGAjvbXq47bOaZiiJgkl5MsjHIuipQpt3AbGnrNPZs9hLqZBObsHAj4ZRqafdZw/exec
+  pin_path: false
+  pin_url: false
+  pin_external_url: true
+  created_at: '2026-04-18'
+  updated_at: '2026-04-19'
+- id: logistics-system
+  name: Logistics System
+  name_zh: 物流系統
+  description: 可以查詢Notion的庫貨狀況
+  category: system
+  tags:
+  - notion
+  - Demand_Supply_Allocation
+  - html
+  - javascript
+  - python
+  icon: package
+  color: '#22c55e'
+  status: archived
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Antigravity\Demand_Supply_Allocation
+  commands:
+  - label: 啟動 dev server
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Antigravity\Demand_Supply_Allocation";
+      python app.py
+    env: local
+    pinned: true
+  url: http://localhost:8001/index.html
+  external_url: ''
+  pin_path: false
+  pin_url: true
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: fare-conversion-tool
+  name: Variable Price System
+  name_zh: 變價系統
+  description: 記錄商品與價格，可以單品+商品組合，具有變價通知(Gmail)功能
+  category: system
+  tags:
+  - ai
+  - google-apps-script
+  - html
+  icon: receipt
+  color: '#0ea5e9'
+  status: archived
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Antigravity\GAS_Price
+  commands:
+  - label: Google Sheet
+    cmd: https://docs.google.com/spreadsheets/d/1utHnG_sHYSA1sgpIIPXfJzH61FhvA9xQxLJMoscCg-s/edit?gid=0#gid=0
+    env: Google
+    pinned: false
+  - label: GAS
+    cmd: https://script.google.com/macros/s/AKfycbxrdzVDKTTFhATLn9uEzrgeuc1a0Nn507UdQbKcrC8KFPUiFcX8MGNUw-XljRQN9wU/exec
+    env: gas
+    pinned: true
+  url: ''
+  external_url: https://script.google.com/macros/s/AKfycbxrdzVDKTTFhATLn9uEzrgeuc1a0Nn507UdQbKcrC8KFPUiFcX8MGNUw-XljRQN9wU/exec
+  pin_path: true
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: youtube-hottopic
+  name: Youtube_Hottopic
+  name_zh: Youtube_HotTopic
+  description: 篩選Youtube熱門影片（使用YoutubeAPI）
+  category: scraper
+  tags:
+  - python
+  icon: view
+  color: '#0ea5e9'
+  status: archived
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Antigravity\Get_Youtube_HotTopic
+  commands:
+  - label: 啟動 dev server
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Antigravity\Get_Youtube_HotTopic" ;
+      pip install -r requirements.txt ; python main.py
+    env: local
+    pinned: true
+  - label: Notion
+    cmd: https://www.notion.so/Google-Antigravity-Youtube-2d124286a1e880aa8bb3d14ec66fd847?source=copy_link
+    env: Notion
+    pinned: false
+  url: ''
+  external_url: ''
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: order-gas
+  name: Order PDF Generator
+  name_zh: 訂單 PDF 產生器
+  description: Google Apps Script 從 Google Sheets 自動產生 A4 訂單 PDF
+  category: utility
+  tags:
+  - google-apps-script
+  - pdf
+  - sheets
+  - html
+  icon: file-text
+  color: '#0ea5e9'
+  status: wip
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Order_GAS
+  commands: []
+  url: ''
+  external_url: ''
+  created_at: '2026-04-13'
+  updated_at: '2026-04-18'
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+- id: 1shop-one-page-performance-dashboard
+  name: 1Shop One Page Performance Dashboard
+  name_zh: 1shop一頁業績儀錶板
+  description: 透過一頁API抓取業績，並開啟儀錶板
+  category: system
+  tags:
+  - bat
+  - html
+  - python
+  icon: chart-column-increasing
+  color: '#f59e0b'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_performance
+  commands:
+  - label: Notion
+    cmd: https://www.notion.so/1shop_performance-API-KEY-31e24286a1e8808a82faf60e91b24036?source=copy_link
+    env: Notion
+    pinned: false
+  - label: 執行 抓業績&儀錶板
+    cmd: cmd /c "C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_performance\run.bat"
+    env: bat
+    pinned: true
+  - label: 執行 儀錶板
+    cmd: cmd /c "C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_performance\dashboard_unified.bat"
+    env: bat
+    pinned: false
+  url: ''
+  external_url: ''
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: how-to-kick-off-a-project
+  name: How To Kick Off A Project
+  name_zh: 如何快速啟動專案
+  description: How_To_Project，這個程式可以告訴你這個專案建議要如何啟動
+  category: utility
+  tags: []
+  icon: file-play
+  color: '#3b82f6'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\How_To_Project
+  commands:
+  - label: 啟動 bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\How_To_Project\analyze.bat
+    env: bat
+    pinned: false
+  url: ''
+  external_url: ''
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: agency-checkout-matchmaker
+  name: 1Shop Agency Checkout Matchmaker
+  name_zh: 1shop代理商結帳比對程式
+  description: 業務使用，可以比對兩份資料的結帳內容&邏輯
+  category: utility
+  tags: []
+  icon: book-copy
+  color: '#ef4444'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_sales
+  commands:
+  - label: 啟動 CLI
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_sales"; pip install
+      openpyxl pandas requests; python 1shop_overseas_export.py
+    env: local
+    pinned: true
+  - label: 比對結果
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_sales\compare
+    env: local
+    pinned: true
+  url: ''
+  external_url: ''
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: line-conversation-organizer
+  name: Line Conversation Organizer
+  name_zh: LINE對話文字整理機器人
+  description: 可以把複製的LINE文字，整理成好閱讀的對話形式
+  category: utility
+  tags:
+  - bot
+  - line-api
+  icon: text-initial
+  color: '#64748b'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\LINE_chat_formatter\line_chat_formatter
+  commands:
+  - label: Github_Repo
+    cmd: https://github.com/dino-q/line-chat-formatter
+    env: github
+    pinned: false
+  url: ''
+  external_url: https://dino-q.github.io/line-chat-formatter/
+  pin_path: false
+  pin_url: false
+  pin_external_url: true
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: automatically-download-dm-carrefour
+  name: Automatically Download Dm_Carrefour
+  name_zh: 自動下載DM_家樂福
+  description: 自動下載DM_家樂福
+  category: automation
+  tags: []
+  icon: arrow-down-to-line
+  color: '#10b981'
+  status: archived
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Python_code\Carrefour_DM
+  commands:
+  - label: 啟動 Bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Python_code\Carrefour_DM\From Python\run_dm.bat
+    env: bat
+    pinned: true
+  url: ''
+  external_url: ''
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: automatically-download-dm-carrefour-2
+  name: Automatically Download Dm_Full Affiliate
+  name_zh: 自動下載DM_全聯
+  description: 自動下載DM_全聯
+  category: automation
+  tags: []
+  icon: arrow-down-to-line
+  color: '#10b981'
+  status: archived
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Python_code\PX_DM\From Python
+  commands:
+  - label: 啟動 Bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Python_code\PX_DM\From Python\run_px_dm.bat
+    env: bat
+    pinned: true
+  url: ''
+  external_url: ''
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: youtube-hottopic-pro
+  name: Youtube_Hottopic_Pro
+  name_zh: Youtube_HotTopic_Pro
+  description: 更精準的Youtube影片監控與短影音監測；可監測資訊欄有gnir的短網址
+  category: scraper
+  tags: []
+  icon: box
+  color: '#f97316'
+  status: active
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Python_code\Youtube_Info
+  commands:
+  - label: 啟動 Dev Server
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Python_code\Youtube_Info"; pip install
+      python-dateutil pandas requests openpyxl;  python youtube_monitor.py
+    env: local
+    pinned: true
+  - label: 修改關鍵字說明
+    cmd: C:\Users\AG_Di\Desktop\automation\Python_code\Youtube_Info\操作說明.txt
+    env: local
+    pinned: false
+  - label: 輸出結果
+    cmd: C:\Users\AG_Di\Desktop\automation\Python_code\Youtube_Info\output_excels
+    env: local
+    pinned: true
+  url: ''
+  external_url: ''
+  pin_path: true
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-18'
+- id: catching-government-jobs-job-seekers
+  name: Catching Government Jobs_Job Seekers
+  name_zh: 抓政府職缺_事求人
+  description: 抓到後推播到TG，但台灣政府拒絕美國伺服器(Github雲端)的自動化，只能用py抓
+  category: scraper
+  tags:
+  - automation
+  - git
+  icon: box
+  color: '#818cf8'
+  status: archived
+  highlight: false
+  screenshot: ''
+  path: C:\Users\AG_Di\Desktop\automation\Python_code\Get_Job
+  commands:
+  - label: 啟動 Bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Python_code\Get_Job\上傳到Github部署雲端執行(最新)\run_local.bat
+    env: bat
+    pinned: true
+  url: ''
+  external_url: ''
+  pin_path: false
+  pin_url: false
+  pin_external_url: false
+  created_at: '2026-04-18'
+  updated_at: '2026-04-19'
+categories:
+- id: web-app
+  name_zh: 網頁應用
+  icon: globe
+  order: 1
+- id: scraper
+  name_zh: 爬蟲
+  icon: search
+  order: 2
+- id: game
+  name_zh: 遊戲
+  icon: gamepad-2
+  order: 3
+- id: automation
+  name_zh: 自動化
+  icon: zap
+  order: 4
+- id: utility
+  name_zh: 工具
+  icon: wrench
+  order: 5
+- id: system
+  name_zh: 系統
+  icon: server
+  order: 6
+env_types:
+- local
+- docker
+- bat
+- github
+- Notion
+- Netlify
+- gas
+- Google

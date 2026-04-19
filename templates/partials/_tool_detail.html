@@ -1,0 +1,156 @@
+{% from "partials/_icons.html" import github_icon, notion_icon %}
+<div class="modal-header">
+  <h2>
+    <span class="zh">{{ tool.name_zh or tool.name }}</span>
+    <span class="en">{{ tool.name }}</span>
+  </h2>
+  <button class="modal-close-btn" onclick="closeModal()" aria-label="Close">
+    <i data-lucide="x" style="width:20px;height:20px"></i>
+  </button>
+</div>
+
+<div class="detail-content">
+
+  <!-- Screenshot -->
+  {% if tool.screenshot %}
+    <div class="detail-preview">
+      <img src="{{ url_for('static', filename=tool.screenshot) }}"
+           alt="{{ tool.name }}" class="detail-img">
+    </div>
+  {% elif tool.commands %}
+    <div class="detail-terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span>
+        <span class="terminal-dot yellow"></span>
+        <span class="terminal-dot green"></span>
+        <span class="terminal-title">Terminal</span>
+      </div>
+      <div class="terminal-body">
+        {% for cmd in tool.commands %}
+          <div class="code-line">
+            <span class="code-prompt">$</span>
+            <span class="code-text">{{ cmd.cmd }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Info -->
+  <div class="detail-meta">
+    <span class="status-badge status-{{ tool.status }}">{{ tool.status }}</span>
+    <span class="detail-category">
+      <i data-lucide="{{ tool.icon }}" style="width:14px;height:14px;color:{{ tool.color }}"></i>
+      {{ tool.category }}
+    </span>
+  </div>
+
+  <p class="detail-desc">{{ tool.description }}</p>
+
+  {% if tool.tags %}
+    <div class="detail-tags">
+      {% for tag in tool.tags %}
+        <span class="tag-pill">{{ tag }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Commands -->
+  {% if tool.commands %}
+    <div class="detail-section">
+      <h3 class="detail-section-title">
+        <i data-lucide="terminal" style="width:15px;height:15px"></i>
+        <span class="zh">啟動指令</span><span class="en">Launch Commands</span>
+      </h3>
+      {% for cmd in tool.commands %}
+        <div class="cmd-row">
+          <span class="cmd-env {{ cmd.env }}">
+            {% if cmd.env == 'docker' %}
+              <i data-lucide="container" style="width:12px;height:12px"></i>
+            {% elif cmd.env == 'bat' %}
+              <i data-lucide="file-code" style="width:12px;height:12px"></i>
+            {% elif cmd.env == 'github' %}
+              {{ github_icon(12) }}
+            {% elif (cmd.env or '')|lower == 'notion' %}
+              {{ notion_icon(12) }}
+            {% else %}
+              <i data-lucide="terminal" style="width:12px;height:12px"></i>
+            {% endif %}
+            {{ cmd.label }}
+          </span>
+          <code class="cmd-text" title="{{ cmd.cmd }}">{{ cmd.cmd }}</code>
+          <button class="btn-copy" onclick='copyCmd(this, {{ cmd.cmd | tojson }})' title="Copy">
+            <i data-lucide="copy" style="width:14px;height:14px"></i>
+          </button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Links -->
+  {% set ns = namespace(url_cmds=[]) %}
+  {% if tool.commands %}
+    {% for cmd in tool.commands %}
+      {% if cmd.cmd and (cmd.cmd.startswith('http://') or cmd.cmd.startswith('https://')) %}
+        {% set ns.url_cmds = ns.url_cmds + [cmd] %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+  {% if tool.url or tool.external_url or tool.path or ns.url_cmds %}
+    <div class="detail-section">
+      <h3 class="detail-section-title">
+        <i data-lucide="link" style="width:15px;height:15px"></i>
+        <span class="zh">連結</span><span class="en">Links</span>
+      </h3>
+      <div class="detail-links">
+        {% if tool.external_url %}
+          <a href="{{ tool.external_url }}" target="_blank" class="detail-link-item">
+            <i data-lucide="external-link" style="width:14px;height:14px"></i>
+            {{ tool.external_url }}
+          </a>
+        {% endif %}
+        {% if tool.url %}
+          <a href="{{ tool.url }}" target="_blank" class="detail-link-item">
+            <i data-lucide="globe" style="width:14px;height:14px"></i>
+            {{ tool.url }}
+          </a>
+        {% endif %}
+        {% for cmd in ns.url_cmds %}
+          <a href="{{ cmd.cmd }}" target="_blank" class="detail-link-item">
+            {% set elower = (cmd.env or '')|lower %}
+            {% if elower == 'github' %}
+              {{ github_icon(14) }}
+            {% elif elower == 'notion' %}
+              {{ notion_icon(14) }}
+            {% else %}
+              <i data-lucide="link-2" style="width:14px;height:14px"></i>
+            {% endif %}
+            <span class="detail-link-label">{{ cmd.label }}</span>
+            <span class="detail-link-url">{{ cmd.cmd }}</span>
+          </a>
+        {% endfor %}
+        {% if tool.path %}
+          <button type="button" class="detail-link-item detail-link-copy"
+                  onclick='copyCmd(this, {{ tool.path | tojson }})'
+                  title="點一下複製路徑">
+            <i data-lucide="copy" style="width:14px;height:14px"></i>
+            <code>{{ tool.path }}</code>
+          </button>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Footer actions -->
+  {% if is_editor %}
+    <div class="detail-actions">
+      <button class="btn-ghost"
+              hx-get="/api/tool/{{ tool.id }}/edit"
+              hx-target="#modal-content"
+              hx-swap="innerHTML">
+        <i data-lucide="pencil" style="width:14px;height:14px"></i>
+        <span class="zh">編輯</span><span class="en">Edit</span>
+      </button>
+    </div>
+  {% endif %}
+</div>

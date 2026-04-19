@@ -1,0 +1,95 @@
+{% from "partials/_icons.html" import github_icon, notion_icon %}
+<div class="featured-card" style="--card-accent: {{ hero.color }}">
+  <div class="featured-inner">
+    <!-- Left: Preview -->
+    <div class="featured-preview">
+      {% if hero.screenshot %}
+        <img src="{{ url_for('static', filename=hero.screenshot) }}"
+             alt="{{ hero.name }}" class="featured-img" loading="lazy">
+      {% else %}
+        <div class="featured-terminal">
+          <div class="terminal-bar">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">Terminal</span>
+          </div>
+          <div class="terminal-body">
+            {% for cmd in hero.commands[:3] %}
+              <div class="code-line">
+                <span class="code-prompt">$</span>
+                <span class="code-text">{{ cmd.cmd[:90] }}{% if cmd.cmd|length > 90 %}...{% endif %}</span>
+              </div>
+            {% endfor %}
+            <div class="code-line">
+              <span class="code-cursor">_</span>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Right: Info -->
+    <div class="featured-info">
+      <span class="status-badge status-{{ hero.status }}">{{ hero.status }}</span>
+      <h3 class="featured-name">{{ hero.name }}</h3>
+      <p class="featured-name-zh">{{ hero.name_zh }}</p>
+      <p class="featured-desc">{{ hero.description }}</p>
+
+      <div class="featured-tags">
+        {% for tag in hero.tags %}
+          <span class="tag-pill">{{ tag }}</span>
+        {% endfor %}
+      </div>
+
+      <div class="featured-commands">
+        <p class="commands-label">
+          <span class="zh">快速啟動</span><span class="en">Quick Launch</span>
+        </p>
+        <div class="cmd-list">
+        {% for cmd in hero.commands %}
+          <div class="cmd-row">
+            <span class="cmd-env {{ cmd.env }}">
+              {% if cmd.env == 'docker' %}
+                <i data-lucide="container" style="width:12px;height:12px"></i>
+              {% elif cmd.env == 'bat' %}
+                <i data-lucide="file-code" style="width:12px;height:12px"></i>
+              {% elif cmd.env == 'github' %}
+                {{ github_icon(12) }}
+              {% elif (cmd.env or '')|lower == 'notion' %}
+                {{ notion_icon(12) }}
+              {% else %}
+                <i data-lucide="terminal" style="width:12px;height:12px"></i>
+              {% endif %}
+              {{ cmd.label }}
+            </span>
+            <code class="cmd-text" title="{{ cmd.cmd }}">{{ cmd.cmd[:80] }}{% if cmd.cmd|length > 80 %}...{% endif %}</code>
+            <button class="btn-copy" onclick='copyCmd(this, {{ cmd.cmd | tojson }})' title="Copy command">
+              <i data-lucide="copy" style="width:14px;height:14px"></i>
+            </button>
+          </div>
+        {% endfor %}
+        </div>
+      </div>
+
+      <div class="featured-actions">
+        {% if hero.url %}
+          <a href="{{ hero.url }}" target="_blank" class="btn-primary">
+            <i data-lucide="external-link" style="width:16px;height:16px"></i>
+            <span class="zh">開啟</span><span class="en">Open</span>
+          </a>
+        {% endif %}
+        {% if is_editor %}
+          <button class="btn-ghost"
+                  hx-get="/api/tool/{{ hero.id }}/edit"
+                  hx-target="#modal-content"
+                  hx-swap="innerHTML"
+                  onclick="openModal()">
+            <i data-lucide="pencil" style="width:14px;height:14px"></i>
+            <span class="zh">編輯</span><span class="en">Edit</span>
+          </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

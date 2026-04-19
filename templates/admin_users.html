@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="admin-page">
+  <div class="admin-header">
+    <a href="{{ url_for('main.index') }}" class="admin-back">
+      <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
+      <span class="zh">返回儀表板</span><span class="en">Back to dashboard</span>
+    </a>
+    <h1><span class="zh">使用者管理</span><span class="en">User Management</span></h1>
+    <p class="admin-subtitle">
+      <span class="zh">核准新申請、調整權限、刪除帳號</span>
+      <span class="en">Approve new requests, change roles, delete accounts</span>
+    </p>
+  </div>
+
+  <div class="users-table-wrap">
+    <table class="users-table">
+      <thead>
+        <tr>
+          <th><span class="zh">使用者</span><span class="en">Username</span></th>
+          <th><span class="zh">角色</span><span class="en">Role</span></th>
+          <th><span class="zh">狀態</span><span class="en">Status</span></th>
+          <th><span class="zh">建立日期</span><span class="en">Created</span></th>
+          <th><span class="zh">操作</span><span class="en">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr class="user-row {{ 'is-pending' if not u.approved }}">
+            <td class="user-name">
+              {{ u.username }}
+              {% if current and current.username == u.username %}
+                <span class="badge-you"><span class="zh">你</span><span class="en">you</span></span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="role-badge role-{{ u.role }}">
+                {% if u.role == 'admin' %}
+                  <i data-lucide="shield" style="width:11px;height:11px"></i> admin
+                {% elif u.role == 'editor' %}
+                  <i data-lucide="pencil" style="width:11px;height:11px"></i> editor
+                {% else %}
+                  <i data-lucide="eye" style="width:11px;height:11px"></i> viewer
+                {% endif %}
+              </span>
+            </td>
+            <td>
+              {% if u.approved %}
+                <span class="status-approved">
+                  <i data-lucide="check-circle" style="width:12px;height:12px"></i>
+                  <span class="zh">已核准</span><span class="en">Approved</span>
+                </span>
+              {% else %}
+                <span class="status-pending">
+                  <i data-lucide="clock" style="width:12px;height:12px"></i>
+                  <span class="zh">待審核</span><span class="en">Pending</span>
+                </span>
+              {% endif %}
+            </td>
+            <td class="user-date">{{ u.created_at }}</td>
+            <td class="user-actions">
+              {% if not u.approved %}
+                <form method="POST" action="{{ url_for('admin.approve_user', username=u.username) }}" class="inline-form">
+                  <select name="role" class="role-select">
+                    <option value="viewer">viewer</option>
+                    <option value="editor">editor</option>
+                  </select>
+                  <button type="submit" class="btn-primary-sm">
+                    <span class="zh">核准</span><span class="en">Approve</span>
+                  </button>
+                </form>
+                <form method="POST" action="{{ url_for('admin.delete_user_endpoint', username=u.username) }}" class="inline-form"
+                      onsubmit="return confirm('拒絕並刪除 {{ u.username }} 的申請？')">
+                  <button type="submit" class="btn-ghost-sm danger">
+                    <span class="zh">拒絕</span><span class="en">Reject</span>
+                  </button>
+                </form>
+              {% else %}
+                <form method="POST" action="{{ url_for('admin.change_role', username=u.username) }}" class="inline-form">
+                  <select name="role" class="role-select">
+                    <option value="viewer" {{ 'selected' if u.role == 'viewer' }}>viewer</option>
+                    <option value="editor" {{ 'selected' if u.role == 'editor' }}>editor</option>
+                    <option value="admin" {{ 'selected' if u.role == 'admin' }}>admin</option>
+                  </select>
+                  <button type="submit" class="btn-ghost-sm">
+                    <span class="zh">改角色</span><span class="en">Change</span>
+                  </button>
+                </form>
+                {% if current and current.username != u.username %}
+                  <form method="POST" action="{{ url_for('admin.delete_user_endpoint', username=u.username) }}" class="inline-form"
+                        onsubmit="return confirm('刪除帳號 {{ u.username }}？')">
+                    <button type="submit" class="btn-ghost-sm danger">
+                      <span class="zh">刪除</span><span class="en">Delete</span>
+                    </button>
+                  </form>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if not users %}
+      <p class="empty-state"><span class="zh">沒有任何帳號</span><span class="en">No users yet</span></p>
+    {% endif %}
+  </div>
+
+  <div class="admin-legend">
+    <p><strong>admin</strong> — <span class="zh">全部權限 + 使用者管理</span><span class="en">full access + user management</span></p>
+    <p><strong>editor</strong> — <span class="zh">新增 / 編輯 / 刪除 工具</span><span class="en">add / edit / delete tools</span></p>
+    <p><strong>viewer</strong> — <span class="zh">只能瀏覽</span><span class="en">read-only</span></p>
+  </div>
+</div>
+{% endblock %}

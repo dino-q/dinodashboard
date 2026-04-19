@@ -1,0 +1,11 @@
+<aside class="projects-toc" id="projects-toc" hx-swap-oob="outerHTML">
+  <nav class="toc-nav">
+    {% for group in groups %}
+      <a href="#cat-{{ group.category.id }}" class="toc-link" data-cat="{{ group.category.id }}">
+        <i data-lucide="{{ group.category.icon }}" style="width:14px;height:14px"></i>
+        <span>{{ group.category.name_zh }}</span>
+        <span class="toc-count">{{ group.tools | length }}</span>
+      </a>
+    {% endfor %}
+  </nav>
+</aside>

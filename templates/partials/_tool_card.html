@@ -1,0 +1,147 @@
+{% from "partials/_icons.html" import github_icon, notion_icon %}
+<article class="project-card" style="--card-accent: {{ tool.color }}" data-tool-id="{{ tool.id }}"
+         hx-get="/api/tool/{{ tool.id }}/detail"
+         hx-target="#modal-content"
+         hx-swap="innerHTML"
+         onclick="openModal()"
+         role="button" tabindex="0">
+
+  {% if is_editor %}
+    <!-- Drag handle (reorder) -->
+    <span class="card-drag-handle" draggable="true" title="拖曳排序" aria-label="Drag to reorder"
+          onclick="event.stopPropagation()">
+      <i data-lucide="grip-vertical" style="width:14px;height:14px"></i>
+    </span>
+
+    <!-- Star toggle -->
+    <button class="star-btn{% if tool.starred %} starred{% endif %}"
+            hx-post="/api/tool/{{ tool.id }}/star"
+            hx-target="#tool-grid"
+            hx-swap="innerHTML"
+            onclick="event.stopPropagation()"
+            title="{{ '取消常用' if tool.starred else '加入常用' }}"
+            aria-label="Toggle star">
+      <i data-lucide="star" style="width:14px;height:14px"></i>
+    </button>
+  {% else %}
+    <!-- Star indicator (read-only, so viewers still see the same visual slot) -->
+    <span class="star-btn star-readonly{% if tool.starred %} starred{% endif %}"
+          aria-hidden="true">
+      <i data-lucide="star" style="width:14px;height:14px"></i>
+    </span>
+  {% endif %}
+
+  <!-- Preview — big visual -->
+  <div class="card-visual">
+    {% if tool.screenshot %}
+      <img src="{{ url_for('static', filename=tool.screenshot) }}"
+           alt="{{ tool.name }}" class="card-img" loading="lazy">
+    {% else %}
+      <div class="card-terminal">
+        <div class="terminal-bar mini">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+        </div>
+        <div class="terminal-body">
+          {% if tool.commands %}
+            {% for cmd in tool.commands[:2] %}
+              <div class="code-line">
+                <span class="code-prompt">$</span>
+                <span class="code-text">{{ cmd.cmd[:55] }}{% if cmd.cmd|length > 55 %}...{% endif %}</span>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="card-icon-center" style="color: {{ tool.color or 'var(--text-muted)' }}">
+              <i data-lucide="{{ tool.icon or 'box' }}" style="width:56px;height:56px"></i>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Hover overlay — only items marked pinned appear here -->
+    <div class="card-overlay">
+      {% if tool.external_url and tool.pin_external_url %}
+        <a href="{{ tool.external_url }}" target="_blank" class="overlay-btn overlay-btn-web" onclick="event.stopPropagation()">
+          <i data-lucide="globe" style="width:14px;height:14px"></i>
+          <span class="zh">網頁</span><span class="en">Website</span>
+        </a>
+      {% endif %}
+      {% if tool.path and tool.pin_path %}
+        <button class="overlay-btn" onclick='event.stopPropagation(); copyCmd(this, {{ tool.path | tojson }})'>
+          <i data-lucide="folder" style="width:14px;height:14px"></i>
+          <span class="zh">路徑</span><span class="en">Path</span>
+        </button>
+      {% endif %}
+      {% if tool.commands %}
+        {% for cmd in tool.commands if cmd.pinned %}
+          <button class="overlay-btn" onclick='event.stopPropagation(); copyCmd(this, {{ cmd.cmd | tojson }})'>
+            {% if cmd.env == 'docker' %}
+              <i data-lucide="container" style="width:14px;height:14px"></i>
+            {% elif cmd.env == 'bat' %}
+              <i data-lucide="file-code" style="width:14px;height:14px"></i>
+            {% elif cmd.env == 'github' %}
+              {{ github_icon(14) }}
+            {% elif (cmd.env or '')|lower == 'notion' %}
+              {{ notion_icon(14) }}
+            {% else %}
+              <i data-lucide="terminal" style="width:14px;height:14px"></i>
+            {% endif %}
+            {{ cmd.label }}
+          </button>
+        {% endfor %}
+      {% endif %}
+      {% if tool.url and tool.pin_url %}
+        <a href="{{ tool.url }}" target="_blank" class="overlay-btn" onclick="event.stopPropagation()">
+          <i data-lucide="external-link" style="width:14px;height:14px"></i>
+          <span class="zh">本地網址</span><span class="en">Local URL</span>
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Card body -->
+  <div class="card-body">
+    <div class="card-top-row">
+      <span class="card-category-dot" style="background: var(--card-accent)"></span>
+      <span class="card-category-label">{{ tool.category }}</span>
+      {% if is_editor %}
+        <div class="card-menu-wrap">
+          <button class="btn-icon-sm card-menu-btn" onclick="event.stopPropagation(); toggleCardMenu(this)">
+            <i data-lucide="more-horizontal" style="width:16px;height:16px"></i>
+          </button>
+          <div class="card-menu">
+            <button hx-get="/api/tool/{{ tool.id }}/edit"
+                    hx-target="#modal-content"
+                    hx-swap="innerHTML"
+                    onclick="openModal()">
+              <i data-lucide="pencil" style="width:14px;height:14px"></i>
+              <span class="zh">編輯</span><span class="en">Edit</span>
+            </button>
+            <button class="danger"
+                    hx-delete="/api/tool/{{ tool.id }}"
+                    hx-target="#tool-grid"
+                    hx-swap="innerHTML"
+                    hx-confirm="Delete &quot;{{ tool.name }}&quot;?">
+              <i data-lucide="trash-2" style="width:14px;height:14px"></i>
+              <span class="zh">刪除</span><span class="en">Delete</span>
+            </button>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <h3 class="card-name">
+      <span class="zh">{{ tool.name_zh or tool.name }}</span>
+      <span class="en">{{ tool.name }}</span>
+    </h3>
+    <p class="card-desc">{{ tool.description }}</p>
+
+    <div class="card-tags">
+      {% for tag in tool.tags[:4] %}
+        <span class="tag-pill">{{ tag }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</article>

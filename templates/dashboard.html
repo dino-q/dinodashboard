@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% from "partials/_icons.html" import github_icon, notion_icon %}
+
+{% block content %}
+<div class="snap-container" id="snap-container">
+
+<!-- ===== PAGE 1: HERO ===== -->
+<section class="site-hero snap-page">
+  <div class="hero-glow"></div>
+  <div class="site-hero-inner">
+
+    <!-- Nav -->
+    <nav class="site-nav">
+      <span class="site-nav-brand">Dino</span>
+      <div class="site-nav-links">
+        <a href="#featured" class="nav-link">
+          <span class="zh">精選</span><span class="en">Featured</span>
+        </a>
+        <a href="#projects" class="nav-link">
+          <span class="zh">作品</span><span class="en">Projects</span>
+        </a>
+      </div>
+      <div class="site-nav-right">
+        <button class="nav-icon-btn" onclick="toggleLang()" title="Toggle language" id="lang-toggle-btn">
+          <span class="zh">EN</span><span class="en">中</span>
+        </button>
+        <button class="nav-icon-btn" onclick="toggleTheme()" title="Toggle theme">
+          <i data-lucide="moon" id="theme-icon"></i>
+        </button>
+        <button class="nav-icon-btn" onclick="jumpToSearch()" title="Search">
+          <i data-lucide="search"></i>
+        </button>
+        {% if is_logged_in %}
+          {% if is_editor %}
+            <button class="nav-icon-btn"
+                    hx-get="/api/tool/new"
+                    hx-target="#modal-content"
+                    hx-swap="innerHTML"
+                    onclick="openModal()"
+                    title="新增工具"
+                    aria-label="Add tool">
+              <i data-lucide="plus" style="width:18px;height:18px"></i>
+            </button>
+          {% endif %}
+          {% if is_admin %}
+            <a href="{{ url_for('admin.users_page') }}" class="nav-icon-btn" title="使用者管理">
+              <i data-lucide="users" style="width:16px;height:16px"></i>
+            </a>
+          {% endif %}
+          <a href="/logout" class="nav-icon-btn" title="Logout — {{ current_user.username }}">
+            <i data-lucide="log-out" style="width:16px;height:16px"></i>
+          </a>
+        {% else %}
+          <a href="/login" class="nav-btn accent">
+            <i data-lucide="lock" style="width:15px;height:15px"></i>
+            <span class="zh">登入</span><span class="en">Sign In</span>
+          </a>
+        {% endif %}
+      </div>
+    </nav>
+
+    <!-- Hero content -->
+    <div class="hero-row">
+      <p class="hero-eyebrow">
+        <span class="zh">作品集 &amp; 工具箱</span>
+        <span class="en">Portfolio &amp; Toolbox</span>
+      </p>
+      <h1 class="hero-headline">
+        <span class="zh">從零<br><span class="gradient-text">親手打造</span></span>
+        <span class="en">Things I've<br><span class="gradient-text">Built</span></span>
+      </h1>
+      <p class="hero-tagline">
+        <span class="zh">涵蓋網頁應用、AI 工具、資料爬蟲、從遊戲到自動化<br>每項都由好奇心驅動、細心打磨。感謝偉大的 AI 時代</span>
+        <span class="en">Spanning web apps, AI tools, scrapers, games &amp; automation<br>Each one driven by curiosity and crafted with care. Thanks to the greatest era of AI</span>
+      </p>
+      <div class="hero-stats">
+        <div class="stat-item">
+          <span class="stat-num" data-count="{{ total }}">&nbsp;</span>
+          <span class="stat-label">
+            <span class="zh">專案</span><span class="en">Projects</span>
+          </span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num" data-count="{{ tech_count }}">&nbsp;</span>
+          <span class="stat-label">
+            <span class="zh">技術</span><span class="en">Technologies</span>
+          </span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num" data-count="{{ published }}">&nbsp;</span>
+          <span class="stat-label">
+            <span class="zh">網站</span><span class="en">Web Apps</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scroll hint -->
+    <a href="#featured" class="hero-scroll-hint">
+      <span class="zh">往下探索</span><span class="en">Scroll to explore</span>
+      <i data-lucide="chevron-down" style="width:20px;height:20px"></i>
+    </a>
+
+  </div>
+</section>
+
+<!-- ===== PAGE 2: FEATURED ===== -->
+<section class="section featured-section snap-page{% if not hero %} featured-hidden{% endif %}" id="featured">
+  {% if hero %}
+    <div class="section-inner">
+      <p class="section-eyebrow">
+        <span class="zh">精選</span><span class="en">Featured</span>
+      </p>
+      <h2 class="section-title">
+        <span class="zh">啟動環境</span><span class="en">Dev Environment</span>
+      </h2>
+      {% include "partials/_hero.html" %}
+    </div>
+    <a href="#projects" class="featured-scroll-hint">
+      <span class="zh">繼續探索</span><span class="en">Keep exploring</span>
+      <i data-lucide="chevron-down" style="width:20px;height:20px"></i>
+    </a>
+  {% endif %}
+</section>
+
+<!-- ===== PAGE 3+: PROJECTS (free scroll from here) ===== -->
+<section class="section projects-section snap-page" id="projects">
+  <div class="section-inner">
+    <div class="view-toggle" role="tablist" aria-label="View mode">
+      <button type="button" class="view-toggle-btn active" data-view="cards" onclick="setViewMode('cards')">
+        <span class="zh">卡片</span><span class="en">Cards</span>
+      </button>
+      <span class="view-toggle-sep">/</span>
+      <button type="button" class="view-toggle-btn" data-view="list" onclick="setViewMode('list')">
+        <span class="zh">列表</span><span class="en">List</span>
+      </button>
+    </div>
+    <h2 class="section-title">
+      <span class="zh">所有作品</span><span class="en">All Works</span>
+    </h2>
+
+    <nav class="filter-bar">
+      <button class="filter-pill {{ 'active' if not active_category }}"
+              hx-get="/api/tools"
+              hx-target="#tool-grid"
+              hx-swap="innerHTML">
+        <span class="zh">全部</span><span class="en">All</span>
+      </button>
+      {% for cat in categories %}
+        <button class="filter-pill {{ 'active' if active_category == cat.id }}"
+                hx-get="/api/tools?category={{ cat.id }}"
+                hx-target="#tool-grid"
+                hx-swap="innerHTML">
+          <i data-lucide="{{ cat.icon }}" style="width:14px;height:14px"></i>
+          {{ cat.name_zh }}
+        </button>
+      {% endfor %}
+
+      <div class="filter-spacer"></div>
+
+      {% if is_editor %}
+        <button class="filter-add-btn"
+                hx-get="/api/tool/new"
+                hx-target="#modal-content"
+                hx-swap="innerHTML"
+                onclick="openModal()"
+                title="新增工具"
+                aria-label="Add tool">
+          <i data-lucide="plus" style="width:16px;height:16px"></i>
+        </button>
+      {% endif %}
+
+      <!-- Filter menu trigger -->
+      <div class="filter-menu-wrap">
+        <button type="button" class="filter-add-btn filter-menu-btn"
+                onclick="toggleFilterMenu(event)"
+                title="篩選"
+                aria-label="Filter">
+          <i data-lucide="sliders-horizontal" style="width:16px;height:16px"></i>
+          <span class="filter-badge" id="filter-badge" hidden></span>
+        </button>
+        <form id="filter-menu" class="filter-menu"
+              hx-get="/api/tools"
+              hx-trigger="change"
+              hx-target="#tool-grid"
+              hx-swap="innerHTML"
+              hx-on::after-request="updateFilterBadge()">
+          <div class="filter-menu-group">
+            <p class="filter-menu-title"><span class="zh">狀態</span><span class="en">Status</span></p>
+            <label class="filter-menu-opt">
+              <input type="radio" name="status" value="" {{ 'checked' if not active_status }}>
+              <span class="zh">全部</span><span class="en">All</span>
+            </label>
+            <label class="filter-menu-opt">
+              <input type="radio" name="status" value="active" {{ 'checked' if active_status == 'active' }}>
+              <span class="status-dot-inline dot-active"></span>
+              <span class="zh">使用中</span><span class="en">Active</span>
+            </label>
+            <label class="filter-menu-opt">
+              <input type="radio" name="status" value="wip" {{ 'checked' if active_status == 'wip' }}>
+              <span class="status-dot-inline dot-wip"></span>
+              <span class="zh">開發中</span><span class="en">WIP</span>
+            </label>
+            <label class="filter-menu-opt">
+              <input type="radio" name="status" value="archived" {{ 'checked' if active_status == 'archived' }}>
+              <span class="status-dot-inline dot-archived"></span>
+              <span class="zh">已封存</span><span class="en">Archived</span>
+            </label>
+          </div>
+          <div class="filter-menu-group">
+            <p class="filter-menu-title"><span class="zh">包含</span><span class="en">Has</span></p>
+            <label class="filter-menu-opt">
+              <input type="checkbox" name="has_external" value="1">
+              <i data-lucide="globe" style="width:14px;height:14px"></i>
+              <span class="zh">外網</span><span class="en">Website</span>
+            </label>
+            <label class="filter-menu-opt">
+              <input type="checkbox" name="has_local_url" value="1">
+              <i data-lucide="monitor" style="width:14px;height:14px"></i>
+              <span class="zh">本地網址</span><span class="en">Local URL</span>
+            </label>
+            <label class="filter-menu-opt">
+              <input type="checkbox" name="has_notion" value="1">
+              {{ notion_icon(14) }}
+              <span class="zh">Notion 頁面</span><span class="en">Notion</span>
+            </label>
+            <label class="filter-menu-opt">
+              <input type="checkbox" name="has_github" value="1">
+              {{ github_icon(14) }}
+              <span class="zh">GitHub 頁面</span><span class="en">GitHub</span>
+            </label>
+            <label class="filter-menu-opt">
+              <input type="checkbox" name="has_gas" value="1">
+              <i data-lucide="cloud" style="width:14px;height:14px"></i>
+              <span class="zh">GAS 專案</span><span class="en">GAS</span>
+            </label>
+          </div>
+          <button type="button" class="filter-menu-reset" onclick="resetFilterMenu(this)">
+            <i data-lucide="rotate-ccw" style="width:12px;height:12px"></i>
+            <span class="zh">清除篩選</span><span class="en">Reset</span>
+          </button>
+          {% if is_editor %}
+            <button type="button" class="filter-menu-action"
+                    hx-post="/api/auto-tag"
+                    hx-target="#tool-grid"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this"
+                    title="掃描每個工具的本機路徑、自動補齊技術標籤（純本機檔案掃描，不用任何 API）">
+              <i data-lucide="scan-search" style="width:13px;height:13px"></i>
+              <span class="zh">掃描本機技術標籤</span><span class="en">Scan local tech tags</span>
+            </button>
+          {% endif %}
+        </form>
+      </div>
+
+      <div class="search-box">
+        <i data-lucide="search" class="search-icon"></i>
+        <input type="search"
+               name="q"
+               hx-get="/api/tools"
+               hx-trigger="input delay:300ms, search"
+               hx-target="#tool-grid"
+               hx-swap="innerHTML"
+               autocomplete="off"
+               class="search-input">
+      </div>
+    </nav>
+
+    <div class="projects-layout">
+      <!-- Sidebar TOC -->
+      <aside class="projects-toc" id="projects-toc">
+        <nav class="toc-nav">
+          {% for group in groups %}
+            <a href="#cat-{{ group.category.id }}" class="toc-link" data-cat="{{ group.category.id }}">
+              <i data-lucide="{{ group.category.icon }}" style="width:14px;height:14px"></i>
+              <span>{{ group.category.name_zh }}</span>
+              <span class="toc-count">{{ group.tools | length }}</span>
+            </a>
+          {% endfor %}
+        </nav>
+      </aside>
+
+      <!-- Grid -->
+      <div id="tool-grid" class="projects-main">
+        {% include "partials/_tool_grid.html" %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer inside the free-scroll area -->
+  <footer class="site-footer">
+    <div class="section-inner">
+      <p>
+        <span class="zh">由 Dino 打造 — 使用 Flask, HTMX &amp; Claude</span>
+        <span class="en">Built by Dino — powered by Flask, HTMX &amp; Claude</span>
+      </p>
+    </div>
+  </footer>
+</section>
+
+</div>
+{% endblock %}

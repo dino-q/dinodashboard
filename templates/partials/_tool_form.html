@@ -1,0 +1,326 @@
+<div class="modal-header">
+  <h2>
+    {% if mode == "edit" %}
+      <span class="zh">編輯工具</span><span class="en">Edit Tool</span>
+    {% else %}
+      <span class="zh">新增工具</span><span class="en">New Tool</span>
+    {% endif %}
+  </h2>
+  <button class="modal-close-btn" onclick="closeModal()" aria-label="Close">
+    <i data-lucide="x" style="width:20px;height:20px"></i>
+  </button>
+</div>
+
+<form class="tool-form"
+      {% if mode == "edit" %}
+        hx-post="/api/tool/{{ tool.id }}"
+      {% else %}
+        hx-post="/api/tool"
+      {% endif %}
+      hx-target="#tool-grid"
+      hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) closeModal()"
+      enctype="multipart/form-data">
+
+  <!-- Chinese name + Description -->
+  <div class="form-group">
+    <label for="name_zh">
+      <span class="zh">中文名稱</span><span class="en">Name (ZH)</span>
+    </label>
+    <input type="text" name="name_zh" id="name_zh" autofocus
+           value="{{ tool.name_zh if tool else '' }}"
+           placeholder="我的工具">
+  </div>
+
+  <div class="form-group">
+    <label for="description">
+      <span class="zh">說明</span><span class="en">Description</span>
+    </label>
+    <textarea name="description" id="description" rows="2"
+              placeholder="簡述這個工具做什麼">{{ tool.description if tool else '' }}</textarea>
+  </div>
+
+  <!-- Suggest -->
+  <button type="button" class="btn-suggest" onclick="suggestFromZh()">
+    <i data-lucide="sparkles" style="width:14px;height:14px"></i>
+    <span class="zh">自動建議英文名稱 &amp; 標籤</span>
+    <span class="en">Suggest English name &amp; tags</span>
+  </button>
+
+  <!-- English name -->
+  <div class="form-group">
+    <label for="name">
+      <span class="zh">英文名稱</span><span class="en">Name (EN)</span>
+      <span class="required-mark">*</span>
+    </label>
+    <input type="text" name="name" id="name" required
+           value="{{ tool.name if tool else '' }}"
+           placeholder="My Tool">
+  </div>
+
+  <!-- Category + Status + Icon -->
+  <div class="form-row-3">
+    <div class="form-group">
+      <label for="category">
+        <span class="zh">分類</span><span class="en">Category</span>
+      </label>
+      <select name="category" id="category" onchange="toggleNewCategory(this)">
+        {% for cat in categories %}
+          <option value="{{ cat.id }}"
+                  {{ 'selected' if tool and tool.category == cat.id }}>
+            {{ cat.name_zh }}
+          </option>
+        {% endfor %}
+        <option value="__new__">＋ 新增分類</option>
+      </select>
+      <div class="new-category-fields" id="new-category-fields" style="display:none">
+        <input type="text" name="new_cat_id" placeholder="ID (e.g. ml-ops)">
+        <input type="text" name="new_cat_name" placeholder="名稱 (e.g. ML Ops)">
+        <input type="text" name="new_cat_icon" placeholder="圖示 (e.g. brain)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="status">
+        <span class="zh">狀態</span><span class="en">Status</span>
+      </label>
+      <select name="status" id="status">
+        <option value="active" {{ 'selected' if not tool or tool.status == 'active' }}>使用中</option>
+        <option value="wip" {{ 'selected' if tool and tool.status == 'wip' }}>開發中</option>
+        <option value="archived" {{ 'selected' if tool and tool.status == 'archived' }}>已封存</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="icon">
+        <span class="zh">圖示</span><span class="en">Icon</span>
+      </label>
+      <div class="icon-input-wrap">
+        <div class="icon-preview" id="icon-preview">
+          <i data-lucide="{{ tool.icon if tool else 'box' }}"></i>
+        </div>
+        <input type="text" name="icon" id="icon"
+               value="{{ tool.icon if tool else 'box' }}"
+               placeholder="box"
+               oninput="updateIconPreview(this.value)">
+      </div>
+      <span class="form-hint">
+        <a href="https://lucide.dev/icons/" target="_blank" rel="noopener">
+          <span class="zh">瀏覽圖示 →</span><span class="en">Browse icons →</span>
+        </a>
+      </span>
+    </div>
+  </div>
+
+  <!-- Tags + Color -->
+  <div class="form-row-2">
+    <div class="form-group">
+      <label for="tags">
+        <span class="zh">標籤（逗號分隔）</span><span class="en">Tags (comma separated)</span>
+      </label>
+      <input type="text" name="tags" id="tags"
+             value="{{ tool.tags | join(', ') if tool else '' }}"
+             placeholder="python, flask, docker">
+    </div>
+    <div class="form-group">
+      <label for="color">
+        <span class="zh">主色</span><span class="en">Accent Color</span>
+      </label>
+      {% set initial_color = tool.color if tool else (default_color or '#6366F1') %}
+      <div class="color-input-wrap">
+        <input type="color" name="color" id="color" value="{{ initial_color }}">
+        <span class="color-hex" id="color-hex">{{ initial_color }}</span>
+      </div>
+      {% if palette %}
+        <div class="color-swatches" role="group" aria-label="Accent palette">
+          {% for c in palette %}
+            <button type="button" class="color-swatch{% if c|lower == initial_color|lower %} active{% endif %}"
+                    style="background: {{ c }}"
+                    data-color="{{ c }}"
+                    onclick="pickSwatch(this)"
+                    title="{{ c }}"
+                    aria-label="Use {{ c }}"></button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Pin hint -->
+  <div class="pin-hint-banner">
+    <i data-lucide="pin" style="width:13px;height:13px"></i>
+    <span class="zh">勾選左側方塊，該項目會在首頁卡片懸浮按鈕顯示</span>
+    <span class="en">Check the box on the left → item appears as a button on the card hover overlay</span>
+  </div>
+
+  <!-- Local Path -->
+  <div class="form-group">
+    <label for="path" class="label-with-pin">
+      <input type="checkbox" name="pin_path" class="pin-checkbox"
+             {{ 'checked' if tool and tool.pin_path }}
+             title="勾選後在卡片懸浮按鈕顯示此路徑（點擊複製）">
+      <span class="zh">本機路徑</span><span class="en">Local Path</span>
+    </label>
+    <input type="text" name="path" id="path"
+           value="{{ tool.path if tool else '' }}"
+           placeholder="C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\DinoDashboard"
+           spellcheck="false" autocomplete="off">
+  </div>
+
+  <!-- URL -->
+  <div class="form-group">
+    <label for="url" class="label-with-pin">
+      <input type="checkbox" name="pin_url" class="pin-checkbox"
+             {{ 'checked' if tool and tool.pin_url }}
+             title="勾選後在卡片懸浮按鈕顯示此連結">
+      <span class="zh">本地網址</span><span class="en">Local URL</span>
+    </label>
+    <input type="text" name="url" id="url"
+           value="{{ tool.url if tool else '' }}"
+           placeholder="http://localhost:5000">
+  </div>
+
+  <!-- Website URL -->
+  <div class="form-group">
+    <label for="external_url" class="label-with-pin">
+      <input type="checkbox" name="pin_external_url" class="pin-checkbox"
+             {{ 'checked' if tool and tool.pin_external_url }}
+             title="勾選後在卡片懸浮按鈕顯示此連結（置頂、主色強調）">
+      <span class="zh">網站連結</span><span class="en">Website URL</span>
+    </label>
+    <input type="text" name="external_url" id="external_url"
+           value="{{ tool.external_url if tool else '' }}"
+           placeholder="https://...">
+  </div>
+
+  <input type="hidden" name="screenshot" id="screenshot-path"
+         value="{{ tool.screenshot if tool else '' }}">
+
+  <!-- Expose env types + quick-input presets to JS for dynamic cmd row building + label auto-fill -->
+  <script>
+    window.__ENV_TYPES__ = {{ env_types | tojson }};
+    window.__QUICK_INPUTS__ = {{ quick_inputs | tojson }};
+  </script>
+
+  <!-- Commands -->
+  <div class="form-group">
+    <label><span class="zh">啟動指令</span><span class="en">Launch Commands</span></label>
+    <div id="commands-container">
+      {% if tool and tool.commands %}
+        {% for cmd in tool.commands %}
+          <div class="cmd-field-row" data-cmd-index="{{ loop.index0 }}">
+            <input type="checkbox" name="cmd_pinned_{{ loop.index0 }}" class="cmd-pin-checkbox"
+                   {{ 'checked' if cmd.pinned }}
+                   title="勾選後在卡片懸浮按鈕顯示此指令">
+            <span class="drag-handle" draggable="true" title="拖曳排序" aria-label="Drag to reorder">
+              <i data-lucide="grip-vertical" style="width:14px;height:14px"></i>
+            </span>
+            <input type="text" name="cmd_label_{{ loop.index0 }}" placeholder="Label"
+                   value="{{ cmd.label }}" class="cmd-label-input">
+            <input type="text" name="cmd_cmd_{{ loop.index0 }}" placeholder="Command"
+                   value="{{ cmd.cmd }}" class="cmd-cmd-input">
+            <select name="cmd_env_{{ loop.index0 }}" class="cmd-env-select" onchange="handleEnvChange(this)">
+              {% for e in env_types %}
+                <option value="{{ e }}" {% if e not in ['local', 'docker', 'bat', 'github', 'gas'] %}data-custom="1"{% endif %} {{ 'selected' if cmd.env == e }}>
+                  {% if e == 'local' %}Local{% elif e == 'docker' %}Docker{% elif e == 'bat' %}Bat{% elif e == 'github' %}GitHub{% elif e == 'gas' %}Google Apps Script{% else %}{{ e }}{% endif %}
+                </option>
+              {% endfor %}
+              {% if cmd.env and cmd.env not in env_types %}
+                <option value="{{ cmd.env }}" data-custom="1" selected>{{ cmd.env }}</option>
+              {% endif %}
+              <option value="__custom__">＋ 自訂…</option>
+            </select>
+            <button type="button" class="btn-icon-sm danger" onclick="removeCmdRow(this)" aria-label="Remove">
+              <i data-lucide="trash-2" style="width:14px;height:14px"></i>
+            </button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+    <button type="button" class="btn-ghost" onclick="addCmdRow()">
+      <i data-lucide="plus" style="width:14px;height:14px"></i>
+      <span class="zh">新增指令</span><span class="en">Add command</span>
+    </button>
+  </div>
+
+  <!-- Screenshot (edit only) — after Launch Commands -->
+  {% if mode == "edit" and tool %}
+    <div class="form-group">
+      <label><span class="zh">截圖</span><span class="en">Screenshot</span></label>
+      <div class="screenshot-upload" id="screenshot-upload-{{ tool.id }}">
+        {% if tool.screenshot %}
+          <img src="{{ url_for('static', filename=tool.screenshot) }}" class="screenshot-thumb" alt="Current screenshot">
+        {% endif %}
+        <input type="file" accept="image/*"
+               onchange="uploadScreenshot('{{ tool.id }}', this)">
+        <span class="form-hint">PNG, JPG, WebP</span>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Submit -->
+  <div class="form-actions">
+    <button type="button" class="btn-quick-input" onclick="openQuickInputPanel()"
+            title="快速輸入設定 / Quick input settings"
+            aria-label="Quick input settings">
+      <i data-lucide="zap" style="width:16px;height:16px"></i>
+    </button>
+    <div class="form-actions-right">
+      <button type="button" class="btn-ghost" onclick="closeModal()">
+        <span class="zh">取消</span><span class="en">Cancel</span>
+      </button>
+      <button type="submit" class="btn-primary" id="form-submit-btn">
+        {% if mode == "edit" %}
+          <span class="zh">儲存變更</span><span class="en">Save Changes</span>
+        {% else %}
+          <span class="zh">建立工具</span><span class="en">Create Tool</span>
+        {% endif %}
+      </button>
+    </div>
+  </div>
+</form>
+
+<!-- Quick Input Settings Panel (secondary overlay) -->
+<div id="quick-input-overlay" class="qi-overlay" hidden onclick="if(event.target===this)closeQuickInputPanel()">
+  <div class="qi-panel" role="dialog" aria-label="Quick input settings" onclick="event.stopPropagation()">
+    <div class="qi-header">
+      <h3>
+        <span class="zh">啟動指令：自動帶入對照表</span><span class="en">Launch Commands · Auto-fill Reference</span>
+      </h3>
+      <button type="button" class="modal-close-btn" onclick="closeQuickInputPanel()" aria-label="Close">
+        <i data-lucide="x" style="width:18px;height:18px"></i>
+      </button>
+    </div>
+
+    <div class="qi-body">
+      <section class="qi-section">
+        <div class="qi-section-head">
+          <h4><span class="zh">快速帶入的內容列表</span><span class="en">Quick-fill presets</span></h4>
+          <span class="qi-hint">
+            <span class="zh">每個啟動指令類型一列，沒設定就留空</span>
+            <span class="en">One row per launch-command type; leave blank if unset</span>
+          </span>
+        </div>
+        <div class="qi-table-wrap">
+          <table class="qi-table">
+            <thead>
+              <tr>
+                <th style="width:130px"><span class="zh">類型</span><span class="en">Type</span></th>
+                <th style="width:200px"><span class="zh">標籤</span><span class="en">Label</span></th>
+                <th><span class="zh">指令</span><span class="en">Command</span></th>
+              </tr>
+            </thead>
+            <tbody id="qi-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div class="qi-footer">
+      <button type="button" class="btn-ghost" onclick="closeQuickInputPanel()">
+        <span class="zh">取消</span><span class="en">Cancel</span>
+      </button>
+      <button type="button" class="btn-primary" onclick="saveQuickInputSettings()">
+        <span class="zh">儲存設定</span><span class="en">Save Settings</span>
+      </button>
+    </div>
+  </div>
+</div>

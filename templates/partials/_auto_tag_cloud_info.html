@@ -1,0 +1,54 @@
+<div class="modal-header">
+  <h2>
+    <span class="zh">雲端環境偵測</span>
+    <span class="en">Cloud Environment Detected</span>
+  </h2>
+  <button class="modal-close-btn" onclick="closeModal()" aria-label="Close">
+    <i data-lucide="x" style="width:20px;height:20px"></i>
+  </button>
+</div>
+
+<div class="auto-tag-info">
+  <div class="info-banner">
+    <i data-lucide="info" style="width:16px;height:16px"></i>
+    <div>
+      <span class="zh">目前環境看不到你本機的工具資料夾。掃描功能只能在你自己電腦跑，然後把結果同步到雲端。</span>
+      <span class="en">Current environment can't access your local project folders. Scanning must run on your own machine, then the result is synced to cloud.</span>
+    </div>
+  </div>
+
+  <ol class="auto-tag-steps">
+    <li>
+      <div class="step-title"><span class="zh">在本機電腦開終端機（你平常寫 code 的那台）</span><span class="en">Open terminal on your local machine</span></div>
+      <pre class="step-cmd"><code>cd path/to/DinoDashboard
+python scripts/auto_tag.py --apply</code></pre>
+      <div class="step-hint">
+        <span class="zh">會掃描每個工具的 <code>path</code> 資料夾，偵測 package.json / requirements.txt / .py / .ts 等，把新技術標籤合併進 tools.yaml</span>
+        <span class="en">Scans each tool's <code>path</code>, detects package.json / requirements.txt / .py / .ts, and merges new tech tags into tools.yaml</span>
+      </div>
+    </li>
+    <li>
+      <div class="step-title"><span class="zh">檢查改動</span><span class="en">Review changes</span></div>
+      <pre class="step-cmd"><code>git diff tools.yaml</code></pre>
+    </li>
+    <li>
+      <div class="step-title"><span class="zh">Commit 並部署</span><span class="en">Commit and deploy</span></div>
+      <pre class="step-cmd"><code>git add tools.yaml
+git commit -m "chore: refresh tech tags"
+git push</code></pre>
+      <div class="step-hint">
+        <span class="zh">push 後你的雲端（Vercel/Railway/Cloud Run 等）會自動重新部署，新標籤立即生效</span>
+        <span class="en">Your cloud host will auto-redeploy on push; new tags take effect immediately</span>
+      </div>
+    </li>
+  </ol>
+
+  <div class="info-note">
+    <strong class="zh">為什麼不能雲端直接掃描？</strong>
+    <strong class="en">Why can't the cloud scan directly?</strong>
+    <p>
+      <span class="zh">掃描要讀你每個工具專案的實際檔案，但雲端伺服器沒有你電腦的硬碟。所以「掃描」是開發時動作、「顯示」才是執行時動作 — 你在本機掃一次推上去，雲端永遠看到最新結果。</span>
+      <span class="en">Scanning reads actual files in each tool's project. Cloud servers don't have access to your local disk. So "scan" is a dev-time action; "display" is the runtime action — scan locally, push, cloud shows the latest.</span>
+    </p>
+  </div>
+</div>

@@ -1,0 +1,17 @@
+<section class="section featured-section snap-page{% if not hero %} featured-hidden{% endif %}" id="featured" hx-swap-oob="outerHTML">
+  {% if hero %}
+    <div class="section-inner">
+      <p class="section-eyebrow">
+        <span class="zh">精選</span><span class="en">Featured</span>
+      </p>
+      <h2 class="section-title">
+        <span class="zh">啟動環境</span><span class="en">Dev Environment</span>
+      </h2>
+      {% include "partials/_hero.html" %}
+    </div>
+    <a href="#projects" class="featured-scroll-hint">
+      <span class="zh">繼續探索</span><span class="en">Keep exploring</span>
+      <i data-lucide="chevron-down" style="width:20px;height:20px"></i>
+    </a>
+  {% endif %}
+</section>
