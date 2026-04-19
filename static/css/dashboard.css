@@ -329,14 +329,14 @@ html { scroll-behavior: smooth; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Rolling digits — iOS Safari renders Inter-700 digits slightly taller than 1em,
-   so a 1.2em strip clips the top/bottom. Use 1.5em with matching line-height. */
+/* Rolling digits — 1.2em is what Chrome/Firefox render cleanly. iOS Safari
+   clips (Inter-700 digit glyph metrics run taller) and its baseline
+   computation offsets the label — so iOS gets bumped to 1.5em + flex-end
+   alignment via the @supports override below. */
 .stat-rolling {
   display: inline-flex;
   overflow: hidden;
-  height: 1.5em;
-  line-height: 1.5em;
-  vertical-align: middle;
+  height: 1.2em;
 }
 
 .roll-col {
@@ -347,9 +347,16 @@ html { scroll-behavior: smooth; }
 
 .roll-col span {
   display: block;
-  height: 1.5em;
-  line-height: 1.5em;
+  height: 1.2em;
+  line-height: 1.2em;
   text-align: center;
+}
+
+/* iOS / macOS Safari only — @supports (-webkit-touch-callout) matches Safari. */
+@supports (-webkit-touch-callout: none) {
+  .stat-rolling { height: 1.5em; }
+  .roll-col span { height: 1.5em; line-height: 1.5em; }
+  .stat-item { align-items: flex-end; line-height: 1; }
 }
 
 .stat-label {
