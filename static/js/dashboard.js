@@ -7,6 +7,216 @@ document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
 });
 
+
+// ---------- Hero particle sphere (Antigravity-style, follows cursor / finger) ----------
+(() => {
+  const hero = document.querySelector('.site-hero');
+  const container = hero && hero.querySelector('.hero-spotlight');
+  if (!hero || !container) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  container.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  container.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+  let W = 0, H = 0;
+  function resize() {
+    const r = hero.getBoundingClientRect();
+    W = r.width; H = r.height;
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+  // Mobile bumped to offset the lower density caused by the oversized sphere radius below.
+  const N = isMobile ? 380 : 650;
+  const PALETTE = [
+    [129, 140, 248],  // indigo-400
+    [99,  102, 241],  // indigo-500
+    [167, 139, 250],  // violet-400
+    [139, 92,  246],  // violet-500
+    [56,  189, 248],  // sky-400
+    [96,  165, 250],  // blue-400
+  ];
+  const ACCENT = [
+    [244, 63,  94],   // rose-500
+    [251, 146, 60],   // orange-400
+    [236, 72,  153],  // pink-500
+  ];
+
+  const ANCHOR_RATIO = 0.25;   // fraction of particles that stay on the sphere to keep its outline
+  const particles = [];
+  for (let i = 0; i < N; i++) {
+    const u = Math.random();
+    const v = Math.random();
+    const theta = 2 * Math.PI * u;
+    const phi = Math.acos(2 * v - 1);
+    const rJitter = 0.88 + Math.random() * 0.22;
+    const isAccent = Math.random() < 0.1;
+    const pool = isAccent ? ACCENT : PALETTE;
+    const color = pool[(Math.random() * pool.length) | 0];
+    const isAnchor = Math.random() < ANCHOR_RATIO;
+    particles.push({
+      theta, phi, rJitter,
+      size: 0.9 + Math.random() * 1.9,
+      r: color[0], g: color[1], b: color[2],
+      isAnchor,
+      pull: isAnchor ? 0 : (0.55 + Math.random() * 0.45),
+      jitterX: (Math.random() - 0.5) * 80,
+      jitterY: (Math.random() - 0.5) * 80,
+      // Lock cycle — each free particle rotates in and out of the cursor's control set
+      locked: false,
+      ctrl: 0,
+      holdUntil: 0,
+      coolUntil: 0,
+      sx: 0, sy: 0, sz: 0, sc: 1,  // cached sphere projection
+    });
+  }
+
+  // Cursor/finger in hero-local coords. null = no active input → fall back to sphere centre.
+  let tx = null, ty = null;
+  let mx = null, my = null;
+
+  const setTarget = (clientX, clientY) => {
+    const rect = hero.getBoundingClientRect();
+    tx = clientX - rect.left;
+    ty = clientY - rect.top;
+  };
+  const clearTarget = () => { tx = null; ty = null; };
+
+  hero.addEventListener('mousemove',  (e) => setTarget(e.clientX, e.clientY), { passive: true });
+  hero.addEventListener('mouseleave', clearTarget, { passive: true });
+  hero.addEventListener('touchstart', (e) => {
+    if (e.touches[0]) setTarget(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  hero.addEventListener('touchmove', (e) => {
+    if (e.touches[0]) setTarget(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  hero.addEventListener('touchend', clearTarget, { passive: true });
+
+  let yaw = 0, pitch = 0, last = 0;
+
+  const frame = (now) => {
+    const dt = Math.min(50, last ? now - last : 16) / 1000;
+    last = now;
+
+    // Sphere centre — desktop: slightly right of middle; mobile: dead centre behind the text.
+    const sphereX = W / 2 + (isMobile ? 0 : W * 0.07);
+    const sphereY = H / 2;
+
+    const aimX = tx == null ? sphereX : tx;
+    const aimY = ty == null ? sphereY : ty;
+    if (mx == null) { mx = sphereX; my = sphereY; }
+    mx += (aimX - mx) * 0.12;
+    my += (aimY - my) * 0.12;
+
+    yaw   += dt * 0.35;
+    pitch += dt * 0.1;
+    const sinY = Math.sin(yaw),   cosY = Math.cos(yaw);
+    const sinP = Math.sin(pitch), cosP = Math.cos(pitch);
+
+    const R = Math.min(W, H) * (isMobile ? 0.88 : 0.32);
+    const persp = R * 2.6;
+
+    // Cursor reach — inside sphere: wide; outside: shrinks so the eligible pool drops.
+    const biasDist  = Math.hypot(mx - sphereX, my - sphereY);
+    const reach     = Math.max(R * 0.55, R * 2.0 - Math.max(0, biasDist - R) * 0.5);
+    const hasInput  = tx != null;
+
+    // Project every particle to its sphere position (cached for the lock pass / draw).
+    for (let i = 0; i < N; i++) {
+      const p = particles[i];
+      const r  = R * p.rJitter;
+      const sp = Math.sin(p.phi);
+      const x0 = r * sp * Math.cos(p.theta);
+      const y0 = r * Math.cos(p.phi);
+      const z0 = r * sp * Math.sin(p.theta);
+      const x1 = x0 * cosY + z0 * sinY;
+      const z1 = -x0 * sinY + z0 * cosY;
+      const y2 = y0 * cosP - z1 * sinP;
+      const z2 = y0 * sinP + z1 * cosP;
+      const scale = persp / (persp + z2);
+      p.sx = sphereX + x1 * scale;
+      p.sy = sphereY + y2 * scale;
+      p.sz = z2;
+      p.sc = scale;
+    }
+
+    // Mobile only: swarm-churn lock cycle (grab random / release random every frame).
+    if (isMobile) {
+      const BUDGET = hasInput ? (N * 0.5) | 0 : 0;
+      let lockedCount = 0;
+      for (let i = 0; i < N; i++) {
+        const p = particles[i];
+        if (p.locked && now > p.holdUntil) {
+          p.locked = false;
+          p.coolUntil = now + 220 + Math.random() * 380;
+        }
+        if (p.locked) lockedCount++;
+      }
+      if (lockedCount < BUDGET) {
+        const startOffset = (Math.random() * N) | 0;
+        let picked = 0;
+        const need = BUDGET - lockedCount;
+        for (let j = 0; j < N && picked < need; j++) {
+          const idx = (startOffset + j) % N;
+          const p = particles[idx];
+          if (p.locked || p.isAnchor || now < p.coolUntil) continue;
+          const d = Math.hypot(p.sx - mx, p.sy - my);
+          if (d > reach) continue;
+          p.locked = true;
+          p.holdUntil = now + 320 + Math.random() * 620;
+          picked++;
+        }
+      }
+    }
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (let i = 0; i < N; i++) {
+      const p = particles[i];
+
+      // Desktop: continuous proximity-based influence. Mobile: smoothed lock state.
+      let k;
+      if (isMobile) {
+        const target = p.locked ? 1 : 0;
+        p.ctrl += (target - p.ctrl) * 0.18;
+        k = p.ctrl * p.pull;
+      } else {
+        const distP = Math.hypot(p.sx - mx, p.sy - my);
+        const influence = Math.pow(Math.max(0, 1 - distP / reach), 1.4);
+        k = influence * p.pull;
+      }
+
+      const targetPX = mx + p.jitterX;
+      const targetPY = my + p.jitterY;
+      const px = p.sx + (targetPX - p.sx) * k;
+      const py = p.sy + (targetPY - p.sy) * k;
+
+      const z2 = p.sz, scale = p.sc;
+      const depthT = (z2 + R) / (2 * R);
+      const baseOp = (1 - depthT) * 0.75 + 0.1;
+      const op     = Math.min(1, baseOp + (0.85 - baseOp) * k);
+      const sz     = Math.max(0.8, p.size * scale * (1 + k * 0.25));
+
+      ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${op.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(px, py, sz * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+})();
+
 // Re-init icons after HTMX swaps
 document.body.addEventListener('htmx:afterSwap', () => {
   lucide.createIcons();
