@@ -2279,12 +2279,24 @@ button.detail-link-item.copied code { color: var(--success); }
   .projects-toc { display: none; }
   .project-grid { grid-template-columns: 1fr; }
 
+  /* Featured section: drop info panel, keep titles + scroll hint. */
+  .featured-section .featured-info { display: none; }
+  .featured-section .featured-inner { grid-template-columns: 1fr; min-height: auto; }
+  .featured-section .featured-preview { aspect-ratio: 16 / 10; }
+
+  /* Projects filter bar: only search + category pills removed. View toggle stays visible. */
   .filter-bar {
-    overflow-x: auto; flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
+    overflow: visible;
   }
-  .search-input { width: 150px; }
-  .search-input:focus { width: 180px; }
+  .filter-bar .filter-pill,
+  .filter-bar .filter-spacer { display: none; }
+  .filter-bar .search-box { flex: 1; min-width: 0; order: -1; }
+  .search-input,
+  .search-input:focus { width: 100%; }
+
+  /* Dropdown fits within viewport and is no longer clipped by filter-bar overflow. */
+  .filter-menu { right: 0; left: auto; max-width: calc(100vw - 32px); }
 
   .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
   .cmd-field-row { grid-template-columns: 18px 20px 1fr 1fr; }

@@ -37,7 +37,7 @@
         <span class="zh">返回登入頁</span><span class="en">Back to Login</span>
       </a>
     {% else %}
-      <form method="POST" class="auth-form">
+      <form method="POST" class="auth-form" id="auth-form">
         <div class="form-group">
           <label for="username">
             <span class="zh">帳號</span><span class="en">Username</span>
@@ -89,4 +89,19 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+  (function () {
+    const form = document.getElementById('auth-form');
+    if (!form) return;
+    form.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag !== 'input') return;
+      e.preventDefault();
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.submit();
+    });
+  })();
+</script>
 {% endblock %}

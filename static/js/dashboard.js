@@ -294,12 +294,22 @@ applyLang(getLang());
 
 
 // ---------- View mode toggle (cards / list) ----------
+function isMobileViewport() {
+  return window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+}
+
+function _viewKey() {
+  return isMobileViewport() ? 'dino-view-mobile' : 'dino-view';
+}
+
 function getViewMode() {
-  return localStorage.getItem('dino-view') || 'cards';
+  const saved = localStorage.getItem(_viewKey());
+  if (saved) return saved;
+  return isMobileViewport() ? 'list' : 'cards';
 }
 
 function setViewMode(mode) {
-  localStorage.setItem('dino-view', mode);
+  localStorage.setItem(_viewKey(), mode);
   applyViewMode(mode);
 }
 
