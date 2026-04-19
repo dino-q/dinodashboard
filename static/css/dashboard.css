@@ -1798,6 +1798,22 @@ html { scroll-behavior: smooth; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Modal loading placeholder — shown the moment the backdrop opens, replaced
+   when the detail/edit partial swaps in. */
+.modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 60px 24px;
+}
+.modal-loading .suggest-spinner {
+  width: 28px; height: 28px;
+  border-width: 3px;
+  border-color: rgba(129,140,248,.25);
+  border-top-color: var(--primary);
+}
+
 .form-actions {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding-top: 16px; border-top: 1px solid var(--border);

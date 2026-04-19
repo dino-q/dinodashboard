@@ -8,6 +8,15 @@ from datetime import date
 
 from data.supabase_client import get_client
 
+# Flask is always available in deploy, but this module is also imported by
+# the standalone migrate script. has_request_context() guards the g access.
+try:
+    from flask import g, has_request_context
+except ImportError:                                    # pragma: no cover
+    g = None
+    def has_request_context():
+        return False
+
 
 # ------------------------------------------------------------------
 # Shared helpers
@@ -15,6 +24,29 @@ from data.supabase_client import get_client
 
 def _sb():
     return get_client()
+
+
+# Per-request memoisation — dedupe repeated load_tools() / load_categories()
+# calls inside a single handler (filter + total count + OOB re-renders all hit
+# the same queries otherwise).
+_CACHE_KEYS = ("_t_cache_tools", "_t_cache_categories")
+
+def _cache_get(key):
+    if g is None or not has_request_context():
+        return None
+    return getattr(g, key, None)
+
+def _cache_set(key, value):
+    if g is not None and has_request_context():
+        setattr(g, key, value)
+    return value
+
+def _cache_clear_all():
+    if g is None or not has_request_context():
+        return
+    for k in _CACHE_KEYS:
+        if hasattr(g, k):
+            delattr(g, k)
 
 
 def _cat_row_to_dict(row: dict) -> dict:
@@ -32,8 +64,11 @@ def _cat_row_to_dict(row: dict) -> dict:
 # ------------------------------------------------------------------
 
 def load_categories() -> list[dict]:
+    cached = _cache_get("_t_cache_categories")
+    if cached is not None:
+        return cached
     res = _sb().table("categories").select("*").order("sort_order").execute()
-    return [_cat_row_to_dict(r) for r in (res.data or [])]
+    return _cache_set("_t_cache_categories", [_cat_row_to_dict(r) for r in (res.data or [])])
 
 
 # ------------------------------------------------------------------
@@ -41,8 +76,11 @@ def load_categories() -> list[dict]:
 # ------------------------------------------------------------------
 
 def load_tools() -> list[dict]:
+    cached = _cache_get("_t_cache_tools")
+    if cached is not None:
+        return cached
     res = (_sb().table("tools").select("*").order("sort_order").execute())
-    return list(res.data or [])
+    return _cache_set("_t_cache_tools", list(res.data or []))
 
 
 def get_tool(tool_id: str) -> dict | None:
@@ -205,11 +243,12 @@ def load_env_types() -> list[str]:
         sb.table("env_types").insert(rows).execute()
         names = list(DEFAULT_ENV_TYPES)
 
-    # 把工具 commands 實際在用、但沒登記的 env 補上（防止 orphan）
-    tools = load_tools()
+    # 把工具 commands 實際在用、但沒登記的 env 補上（防止 orphan）。
+    # 只抓 commands 欄，避免為了 orphan 檢查把整個 tools 表拉回來。
     used = set()
-    for t in tools:
-        for c in t.get("commands") or []:
+    orphan_res = sb.table("tools").select("commands").execute()
+    for row in (orphan_res.data or []):
+        for c in row.get("commands") or []:
             e = c.get("env")
             if e:
                 used.add(e)
@@ -341,6 +380,7 @@ def _ensure_category(form: dict) -> str:
 
 
 def add_tool(form: dict) -> dict:
+    _cache_clear_all()
     sb = _sb()
     tool_id = form.get("id") or _slugify(form.get("name", "tool"))
 
@@ -389,6 +429,7 @@ def add_tool(form: dict) -> dict:
 
 
 def update_tool(tool_id: str, form: dict) -> dict | None:
+    _cache_clear_all()
     sb = _sb()
     existing = get_tool(tool_id)
     if not existing:
@@ -425,12 +466,14 @@ def update_tool(tool_id: str, form: dict) -> dict | None:
 
 
 def delete_tool(tool_id: str) -> bool:
+    _cache_clear_all()
     res = _sb().table("tools").delete().eq("id", tool_id).execute()
     return bool(res.data)
 
 
 def reorder_tool(tool_id: str, before_id: str | None, category: str | None) -> dict | None:
     """把 tool_id 搬到 before_id 前面（None 則放到最後）。同時可換分類。"""
+    _cache_clear_all()
     sb = _sb()
     tools = load_tools()
     tool = next((t for t in tools if t["id"] == tool_id), None)
@@ -469,6 +512,7 @@ def reorder_tool(tool_id: str, before_id: str | None, category: str | None) -> d
 
 
 def toggle_starred(tool_id: str) -> dict | None:
+    _cache_clear_all()
     sb = _sb()
     t = get_tool(tool_id)
     if not t:
@@ -480,6 +524,7 @@ def toggle_starred(tool_id: str) -> dict | None:
 
 def update_screenshot(tool_id: str, url_or_path: str) -> bool:
     """存截圖的完整公開 URL（從 Supabase Storage 來的）"""
+    _cache_clear_all()
     patch = {
         "screenshot": url_or_path,
         "updated_at": str(date.today()),

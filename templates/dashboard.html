@@ -140,15 +140,26 @@
     </h2>
 
     <nav class="filter-bar">
-      <button class="filter-pill {{ 'active' if not active_category }}"
+      <!-- Shared hidden state: category pill updates this, every trigger includes it. -->
+      <input type="hidden" id="filter-category" name="category" value="{{ active_category or '' }}">
+
+      <button type="button"
+              class="filter-pill {{ 'active' if not active_category }}"
+              onclick="setFilterCategory(this, '')"
               hx-get="/api/tools"
+              hx-include="#filter-category, #filter-menu, .search-input"
+              hx-sync="closest .filter-bar:replace"
               hx-target="#tool-grid"
               hx-swap="innerHTML">
         <span class="zh">全部</span><span class="en">All</span>
       </button>
       {% for cat in categories %}
-        <button class="filter-pill {{ 'active' if active_category == cat.id }}"
-                hx-get="/api/tools?category={{ cat.id }}"
+        <button type="button"
+                class="filter-pill {{ 'active' if active_category == cat.id }}"
+                onclick="setFilterCategory(this, '{{ cat.id }}')"
+                hx-get="/api/tools"
+                hx-include="#filter-category, #filter-menu, .search-input"
+                hx-sync="closest .filter-bar:replace"
                 hx-target="#tool-grid"
                 hx-swap="innerHTML">
           <i data-lucide="{{ cat.icon }}" style="width:14px;height:14px"></i>
@@ -182,6 +193,8 @@
         <form id="filter-menu" class="filter-menu"
               hx-get="/api/tools"
               hx-trigger="change"
+              hx-include="#filter-category, .search-input"
+              hx-sync="closest .filter-bar:replace"
               hx-target="#tool-grid"
               hx-swap="innerHTML"
               hx-on::after-request="updateFilterBadge()">
@@ -259,6 +272,8 @@
                name="q"
                hx-get="/api/tools"
                hx-trigger="input delay:300ms, search"
+               hx-include="#filter-category, #filter-menu"
+               hx-sync="closest .filter-bar:replace"
                hx-target="#tool-grid"
                hx-swap="innerHTML"
                autocomplete="off"

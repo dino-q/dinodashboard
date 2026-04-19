@@ -237,9 +237,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     ctx.globalCompositeOperation = 'source-over';
-    requestAnimationFrame(frame);
+    if (_running) _rafId = requestAnimationFrame(frame);
   };
-  requestAnimationFrame(frame);
+
+  // Pause when hero is off-screen or tab is hidden — the canvas otherwise eats
+  // main-thread budget and makes card clicks / filter swaps feel laggy.
+  let _running = false;
+  let _rafId = null;
+  const startParticles = () => {
+    if (_running) return;
+    _running = true;
+    last = 0;
+    _rafId = requestAnimationFrame(frame);
+  };
+  const stopParticles = () => {
+    _running = false;
+    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+  };
+
+  startParticles();
+
+  if ('IntersectionObserver' in window) {
+    const snapRoot = document.getElementById('snap-container');
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) startParticles();
+        else stopParticles();
+      }
+    }, { root: snapRoot || null, threshold: 0 });
+    io.observe(hero);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopParticles();
+    else {
+      // Only resume if hero is still in view
+      const r = hero.getBoundingClientRect();
+      const inView = r.bottom > 0 && r.top < (window.innerHeight || document.documentElement.clientHeight);
+      if (inView) startParticles();
+    }
+  });
 })();
 
 // Re-init icons after HTMX swaps
@@ -255,6 +292,7 @@ document.body.addEventListener('htmx:afterSwap', () => {
 // itself has a min-height (see CSS) so short result sets still fill enough vertical space to keep
 // the user's scroll position valid — avoiding the browser clamp that would force 所有作品 into view.
 let _preservedScrollTop = null;
+let _scrollLockId = 0;         // bumps every afterSwap so older lock loops exit
 document.body.addEventListener('htmx:beforeSwap', (e) => {
   const tgt = e.detail && e.detail.target;
   if (tgt && tgt.id === 'tool-grid') {
@@ -271,11 +309,13 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
   const target = _preservedScrollTop;
   sc.scrollTop = target;
 
+  const myId = ++_scrollLockId;   // invalidates any older lock loop still running
   let ticks = 0;
   const lock = () => {
+    if (myId !== _scrollLockId) return;           // newer swap took over
     if (sc.scrollTop !== target) sc.scrollTop = target;
     if (++ticks < 15) requestAnimationFrame(lock);
-    else _preservedScrollTop = null;
+    else if (myId === _scrollLockId) _preservedScrollTop = null;
   };
   requestAnimationFrame(lock);
 });
@@ -785,6 +825,15 @@ document.body.addEventListener('htmx:beforeRequest', (e) => {
 document.body.addEventListener('htmx:afterRequest', (e) => {
   const btn = e.target.querySelector('#form-submit-btn');
   if (btn && btn.dataset.origText) { btn.disabled = false; btn.innerHTML = btn.dataset.origText; }
+});
+
+// Modal content loading placeholder — avoids the blank backdrop flash while the
+// detail / edit partial is in flight. Fires for any HTMX request that targets
+// #modal-content (card click, Edit from card menu, New tool).
+document.body.addEventListener('htmx:beforeRequest', (e) => {
+  const target = e.detail && e.detail.target;
+  if (!target || target.id !== 'modal-content') return;
+  target.innerHTML = '<div class="modal-loading"><span class="suggest-spinner"></span></div>';
 });
 
 
@@ -1450,14 +1499,11 @@ function syncSwatchActive(color) {
 }
 
 
-// ---------- Filter pill active state ----------
-document.body.addEventListener('htmx:afterSwap', (e) => {
-  if (e.target.id === 'tool-grid') {
-    // Update active filter pill based on the trigger element
-    const trigger = e.detail?.requestConfig?.elt;
-    if (trigger && trigger.classList.contains('filter-pill')) {
-      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
-      trigger.classList.add('active');
-    }
-  }
-});
+// ---------- Filter category pill: update hidden input + active class immediately ----------
+// onclick runs before HTMX fires so hx-include="#filter-category" picks up the new value.
+function setFilterCategory(pillBtn, catId) {
+  const hidden = document.getElementById('filter-category');
+  if (hidden) hidden.value = catId;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  if (pillBtn) pillBtn.classList.add('active');
+}
