@@ -219,8 +219,8 @@
                    value="{{ cmd.cmd }}" class="cmd-cmd-input">
             <select name="cmd_env_{{ loop.index0 }}" class="cmd-env-select" onchange="handleEnvChange(this)">
               {% for e in env_types %}
-                <option value="{{ e }}" {% if e not in ['local', 'docker', 'bat', 'github', 'gas'] %}data-custom="1"{% endif %} {{ 'selected' if cmd.env == e }}>
-                  {% if e == 'local' %}Local{% elif e == 'docker' %}Docker{% elif e == 'bat' %}Bat{% elif e == 'github' %}GitHub{% elif e == 'gas' %}Google Apps Script{% else %}{{ e }}{% endif %}
+                <option value="{{ e }}" {% if e not in ['local', 'docker', 'bat', 'github', 'Google Apps Script'] %}data-custom="1"{% endif %} {{ 'selected' if cmd.env == e }}>
+                  {% if e == 'local' %}Local{% elif e == 'docker' %}Docker{% elif e == 'bat' %}Bat{% elif e == 'github' %}GitHub{% else %}{{ e }}{% endif %}
                 </option>
               {% endfor %}
               {% if cmd.env and cmd.env not in env_types %}
@@ -303,9 +303,11 @@
           <table class="qi-table">
             <thead>
               <tr>
+                <th style="width:32px" aria-label="Reorder"></th>
                 <th style="width:130px"><span class="zh">類型</span><span class="en">Type</span></th>
                 <th style="width:200px"><span class="zh">標籤</span><span class="en">Label</span></th>
                 <th><span class="zh">指令</span><span class="en">Command</span></th>
+                <th style="width:32px" aria-label="Delete"></th>
               </tr>
             </thead>
             <tbody id="qi-tbody"></tbody>

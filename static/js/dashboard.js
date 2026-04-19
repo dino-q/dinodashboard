@@ -2,6 +2,20 @@
    DinoDashboard — Client-side interactions
    ========================================================================== */
 
+// ---------- Always land at the top on navigation / login redirect ----------
+// iOS Safari restores scroll position + CSS scroll-snap can latch to the
+// Featured page mid-load, so explicitly reset unless the URL has a hash.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+function _resetScroll() {
+  if (location.hash) return;
+  const sc = document.getElementById('snap-container');
+  if (sc) sc.scrollTop = 0;
+  window.scrollTo(0, 0);
+}
+document.addEventListener('DOMContentLoaded', _resetScroll);
+window.addEventListener('pageshow', _resetScroll);   // also handles bfcache restores
+
+
 // ---------- Lucide icon init ----------
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
@@ -836,8 +850,8 @@ function addCmdRow() {
   const row = document.createElement('div');
   row.className = 'cmd-field-row';
   row.dataset.cmdIndex = idx;
-  const envTypes = window.__ENV_TYPES__ || ['local', 'docker', 'bat', 'github', 'gas'];
-  const defaultLabels = { local: 'Local', docker: 'Docker', bat: 'Bat', github: 'GitHub', gas: 'Google Apps Script' };
+  const envTypes = window.__ENV_TYPES__ || ['local', 'docker', 'bat', 'github', 'Google Apps Script'];
+  const defaultLabels = { local: 'Local', docker: 'Docker', bat: 'Bat', github: 'GitHub' };
   const envOpts = envTypes.map(e => {
     const label = defaultLabels[e] || e;
     const customAttr = defaultLabels[e] ? '' : ' data-custom="1"';
@@ -1106,9 +1120,9 @@ function removeCmdRow(btn) {
 // Adding an env type auto-appends a matching table row (sync). Saving persists both
 // lists to tools.yaml and refreshes every cmd-env-select currently on the form.
 
-const QI_DEFAULT_ENV_TYPES = ['local', 'docker', 'bat', 'github'];
+const QI_DEFAULT_ENV_TYPES = ['local', 'docker', 'bat', 'github', 'Google Apps Script'];
 const QI_ENV_DISPLAY_LABELS = {
-  local: 'Local', docker: 'Docker', bat: 'Bat', github: 'GitHub', gas: 'Google Apps Script',
+  local: 'Local', docker: 'Docker', bat: 'Bat', github: 'GitHub',
 };
 let _qiState = { env_types: [], quick_inputs: [] };
 
@@ -1166,42 +1180,109 @@ function renderQiTable() {
   if (!tbody) return;
   const envs = _qiState.env_types;
   if (!envs.length) {
-    tbody.innerHTML = '<tr><td colspan="3" class="qi-empty">尚無類型。先在啟動指令區用「＋ 自訂…」新增。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="qi-empty">尚無類型。先在啟動指令區用「＋ 自訂…」新增。</td></tr>';
     return;
   }
-  tbody.innerHTML = envs.map((env, i) => {
+  const dragSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+    <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+  </svg>`;
+  const trashSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </svg>`;
+  tbody.innerHTML = envs.map((env) => {
     const p = _qiPresetFor(env) || { env, label: '', cmd: '' };
+    const locked = QI_DEFAULT_ENV_TYPES.includes(env);   // local/docker/bat/github/gas — protected
     return `
-    <tr data-env-idx="${i}">
-      <td class="qi-env-cell">${_escapeHtml(_qiEnvDisplay(env))}</td>
-      <td><input type="text" value="${_escapeHtml(p.label||'')}"
-                 placeholder="（空白）" oninput="updateQiFieldByIdx(${i},'label',this.value)"></td>
-      <td><input type="text" value="${_escapeHtml(p.cmd||'')}"
-                 placeholder="（空白）" oninput="updateQiFieldByIdx(${i},'cmd',this.value)"></td>
+    <tr class="qi-row" data-orig-env="${_escapeHtml(env)}">
+      <td class="qi-drag">
+        <span class="qi-drag-handle" draggable="true" title="拖曳排序" aria-label="Drag">${dragSvg}</span>
+      </td>
+      <td class="qi-env-cell">
+        <input type="text" class="qi-env-input" value="${_escapeHtml(env)}"
+               ${locked ? 'readonly title="預設類型不可改名"' : 'placeholder="類型名稱"'}>
+      </td>
+      <td><input type="text" class="qi-field" data-field="label" value="${_escapeHtml(p.label||'')}"
+                 placeholder="（空白）"></td>
+      <td><input type="text" class="qi-field" data-field="cmd" value="${_escapeHtml(p.cmd||'')}"
+                 placeholder="（空白）"></td>
+      <td class="qi-delete">
+        ${locked ? '' : `<button type="button" class="qi-del-btn" title="刪除此類型" aria-label="Delete" onclick="deleteQiRow(this)">${trashSvg}</button>`}
+      </td>
     </tr>
   `;
   }).join('');
 }
 
-function updateQiFieldByIdx(idx, key, val) {
-  const env = _qiState.env_types[idx];
-  if (!env) return;
-  let p = _qiPresetFor(env);
-  if (!p) {
-    p = { env, label: '', cmd: '' };
-    _qiState.quick_inputs.push(p);
-  }
-  p[key] = val;
+function deleteQiRow(btn) {
+  const row = btn.closest('.qi-row');
+  if (!row) return;
+  const envInput = row.querySelector('.qi-env-input');
+  const name = envInput ? envInput.value.trim() : (row.dataset.origEnv || '');
+  if (!confirm(`刪除類型「${name || '?'}」？（儲存後才會真的寫回）`)) return;
+  row.remove();
 }
 
+// --- Drag-reorder for quick-input rows (handle only) ---
+let _qiDraggingRow = null;
+document.body.addEventListener('dragstart', (e) => {
+  const handle = e.target.closest('.qi-drag-handle');
+  if (!handle) return;
+  const row = handle.closest('.qi-row');
+  if (!row) return;
+  _qiDraggingRow = row;
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setDragImage(row, 12, 12); } catch (_) {}
+  requestAnimationFrame(() => row.classList.add('qi-dragging'));
+});
+document.body.addEventListener('dragover', (e) => {
+  if (!_qiDraggingRow) return;
+  const tbody = document.getElementById('qi-tbody');
+  if (!tbody || !tbody.contains(e.target)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const rows = [...tbody.querySelectorAll('.qi-row:not(.qi-dragging)')];
+  const after = rows.find(r => {
+    const rect = r.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height / 2;
+  });
+  if (after == null) {
+    if (tbody.lastElementChild !== _qiDraggingRow) tbody.appendChild(_qiDraggingRow);
+  } else if (after !== _qiDraggingRow.nextSibling) {
+    tbody.insertBefore(_qiDraggingRow, after);
+  }
+});
+document.body.addEventListener('dragend', () => {
+  if (!_qiDraggingRow) return;
+  _qiDraggingRow.classList.remove('qi-dragging');
+  _qiDraggingRow = null;
+});
+
 function saveQuickInputSettings() {
+  const tbody = document.getElementById('qi-tbody');
+  const rows = tbody ? [...tbody.querySelectorAll('.qi-row')] : [];
+  const env_types = [];
+  const quick_inputs = [];
+  const seen = new Set();
+  for (const tr of rows) {
+    const envInput = tr.querySelector('.qi-env-input');
+    const env = (envInput ? envInput.value : tr.dataset.origEnv || '').trim();
+    if (!env || seen.has(env)) continue;
+    seen.add(env);
+    env_types.push(env);
+    const labelInput = tr.querySelector('.qi-field[data-field="label"]');
+    const cmdInput   = tr.querySelector('.qi-field[data-field="cmd"]');
+    const label = (labelInput ? labelInput.value : '').trim();
+    const cmd   = (cmdInput   ? cmdInput.value   : '').trim();
+    if (label || cmd) quick_inputs.push({ env, label, cmd });
+  }
   fetch('/api/quick-inputs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      env_types: _qiState.env_types,
-      quick_inputs: _qiState.quick_inputs,
-    }),
+    body: JSON.stringify({ env_types, quick_inputs }),
   })
     .then(r => r.json().then(data => ({ ok: r.ok, data })))
     .then(({ ok, data }) => {
@@ -1225,7 +1306,7 @@ function saveQuickInputSettings() {
           const opt = document.createElement('option');
           opt.value = name;
           opt.textContent = _qiEnvDisplay(name);
-          if (!QI_DEFAULT_ENV_TYPES.includes(name) && name !== 'gas') opt.dataset.custom = '1';
+          if (!QI_DEFAULT_ENV_TYPES.includes(name)) opt.dataset.custom = '1';
           if (customOpt) sel.insertBefore(opt, customOpt); else sel.appendChild(opt);
         });
         // Restore previous selection if still valid, else default to local

@@ -87,7 +87,7 @@ def filter_tools(category: str | None = None, q: str | None = None,
                 return True
             if has_github and _has_env(t, "github"):
                 return True
-            if has_gas and _has_env(t, "gas"):
+            if has_gas and _has_env(t, "google apps script"):
                 return True
             return False
         tools = [t for t in tools if matches(t)]
@@ -143,25 +143,69 @@ def tools_grouped_by_category(category: str | None = None, q: str | None = None,
 # env_types
 # ------------------------------------------------------------------
 
-DEFAULT_ENV_TYPES = ["local", "docker", "bat", "github"]
+DEFAULT_ENV_TYPES = ["local", "docker", "bat", "github", "Google Apps Script"]
+
+# One-shot migration: old raw key → new human-readable name. Kept here so
+# load_env_types() can run it lazily on first call per process.
+_ENV_MIGRATIONS = {"gas": "Google Apps Script"}
+_MIGRATIONS_DONE = False
+
+
+def _migrate_env_names():
+    """Rename legacy env keys in env_types / quick_inputs / tools.commands.
+    Idempotent — once the old key is gone everywhere, later calls no-op."""
+    global _MIGRATIONS_DONE
+    if _MIGRATIONS_DONE:
+        return
+    sb = _sb()
+    for old, new in _ENV_MIGRATIONS.items():
+        # Skip if no legacy rows exist (already migrated)
+        stale = sb.table("env_types").select("name").eq("name", old).execute().data or []
+        if not stale:
+            continue
+
+        # env_types: if new name already exists, drop the old row; else rename.
+        conflict = sb.table("env_types").select("name").eq("name", new).execute().data or []
+        if conflict:
+            sb.table("env_types").delete().eq("name", old).execute()
+        else:
+            sb.table("env_types").update({"name": new}).eq("name", old).execute()
+
+        # quick_inputs: rename the env field
+        sb.table("quick_inputs").update({"env": new}).eq("env", old).execute()
+
+        # tools.commands (jsonb): fetch, mutate, write back per-tool
+        tools_rows = sb.table("tools").select("id, commands").execute().data or []
+        for t in tools_rows:
+            cmds = t.get("commands") or []
+            changed = False
+            for c in cmds:
+                if (c.get("env") or "") == old:
+                    c["env"] = new
+                    changed = True
+            if changed:
+                sb.table("tools").update({"commands": cmds}).eq("id", t["id"]).execute()
+    _MIGRATIONS_DONE = True
 
 
 def load_env_types() -> list[str]:
-    """讀 env_types 表；若缺預設值自動補"""
+    """讀 env_types 表。
+    - 首次啟動（table 完全空）才種入預設值
+    - 已經有資料之後，使用者刪除的類型「不會」自動補回；但仍會把工具 commands 實際在用、
+      卻不在 env_types 的 env 名稱補上，避免指令顯示成 orphan
+    """
+    _migrate_env_names()  # idempotent — runs once per process
     sb = _sb()
     res = sb.table("env_types").select("*").order("sort_order").execute()
     names = [r["name"] for r in (res.data or [])]
 
-    # 補預設值
-    existing = set(names)
-    to_add = [n for n in DEFAULT_ENV_TYPES if n not in existing]
-    if to_add:
-        next_order = len(names)
-        rows = [{"name": n, "sort_order": next_order + i} for i, n in enumerate(to_add)]
+    # 只在完全空白時種入預設值（視為首次啟動）
+    if not names:
+        rows = [{"name": n, "sort_order": i} for i, n in enumerate(DEFAULT_ENV_TYPES)]
         sb.table("env_types").insert(rows).execute()
-        names.extend(to_add)
+        names = list(DEFAULT_ENV_TYPES)
 
-    # 也把各工具 commands 裡出現但未登記的 env 補上
+    # 把工具 commands 實際在用、但沒登記的 env 補上（防止 orphan）
     tools = load_tools()
     used = set()
     for t in tools:
@@ -212,7 +256,7 @@ _QUICK_INPUT_SEED = [
     {"env": "github",  "label": "Github_Repo",     "cmd": ""},
     {"env": "Notion",  "label": "Notion",          "cmd": ""},
     {"env": "Netlify", "label": "Netlify",         "cmd": ""},
-    {"env": "gas",     "label": "GAS",             "cmd": ""},
+    {"env": "Google Apps Script", "label": "GAS",   "cmd": ""},
     {"env": "Google",  "label": "啟動 sheet",      "cmd": ""},
 ]
 
@@ -235,7 +279,7 @@ def save_quick_input_settings(env_types: list[str], quick_inputs: list[dict]) ->
     """一次覆寫 env_types + quick_inputs。"""
     sb = _sb()
 
-    # 清理 env_types — 保留預設、去空白去重
+    # 清理 env_types — 依使用者送來的順序寫入，不強制補回預設值（讓刪除生效）
     cleaned_env = []
     seen = set()
     for name in env_types or []:
@@ -244,10 +288,6 @@ def save_quick_input_settings(env_types: list[str], quick_inputs: list[dict]) ->
             continue
         seen.add(n)
         cleaned_env.append(n)
-    for d in DEFAULT_ENV_TYPES:
-        if d not in seen:
-            cleaned_env.append(d)
-            seen.add(d)
 
     # 清空 env_types 再灌入
     sb.table("env_types").delete().neq("name", "__sentinel__").execute()

@@ -104,15 +104,17 @@
       </h3>
       <div class="detail-links">
         {% if tool.external_url %}
-          <a href="{{ tool.external_url }}" target="_blank" class="detail-link-item">
+          <a href="{{ tool.external_url }}" target="_blank" class="detail-link-item detail-link-web">
             <i data-lucide="external-link" style="width:14px;height:14px"></i>
-            {{ tool.external_url }}
+            <span class="detail-link-label">Web</span>
+            <span class="detail-link-url">{{ tool.external_url }}</span>
           </a>
         {% endif %}
         {% if tool.url %}
           <a href="{{ tool.url }}" target="_blank" class="detail-link-item">
             <i data-lucide="globe" style="width:14px;height:14px"></i>
-            {{ tool.url }}
+            <span class="detail-link-label">Local</span>
+            <span class="detail-link-url">{{ tool.url }}</span>
           </a>
         {% endif %}
         {% for cmd in ns.url_cmds %}
@@ -130,11 +132,12 @@
           </a>
         {% endfor %}
         {% if tool.path %}
-          <button type="button" class="detail-link-item detail-link-copy"
+          <button type="button" class="detail-link-item detail-link-copy detail-link-path"
                   onclick='copyCmd(this, {{ tool.path | tojson }})'
                   title="點一下複製路徑">
-            <i data-lucide="copy" style="width:14px;height:14px"></i>
-            <code>{{ tool.path }}</code>
+            <i data-lucide="folder" style="width:14px;height:14px"></i>
+            <span class="detail-link-label">Path</span>
+            <code class="detail-link-url">{{ tool.path }}</code>
           </button>
         {% endif %}
       </div>

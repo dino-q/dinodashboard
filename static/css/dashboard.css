@@ -329,11 +329,14 @@ html { scroll-behavior: smooth; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Rolling digits */
+/* Rolling digits — iOS Safari renders Inter-700 digits slightly taller than 1em,
+   so a 1.2em strip clips the top/bottom. Use 1.5em with matching line-height. */
 .stat-rolling {
   display: inline-flex;
   overflow: hidden;
-  height: 1.2em;
+  height: 1.5em;
+  line-height: 1.5em;
+  vertical-align: middle;
 }
 
 .roll-col {
@@ -344,8 +347,8 @@ html { scroll-behavior: smooth; }
 
 .roll-col span {
   display: block;
-  height: 1.2em;
-  line-height: 1.2em;
+  height: 1.5em;
+  line-height: 1.5em;
   text-align: center;
 }
 
@@ -1876,9 +1879,40 @@ html { scroll-behavior: smooth; }
 }
 .qi-table input:focus, .qi-table select:focus { border-color: var(--primary); }
 .qi-env-cell {
-  font-size: 13px; font-weight: 500; color: var(--text);
-  padding: 6px 10px !important;
+  padding: 6px 8px !important;
 }
+.qi-env-input {
+  width: 100%; padding: 6px 8px; font-size: 13px; font-family: var(--font-sans);
+  font-weight: 600; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none;
+  box-sizing: border-box; transition: border-color .15s;
+}
+.qi-env-input:focus { border-color: var(--primary); }
+.qi-env-input[readonly] {
+  background: var(--surface-hover); color: var(--text-secondary); cursor: not-allowed;
+  border-color: transparent;
+}
+.qi-drag {
+  width: 32px; padding: 0 !important; text-align: center;
+}
+.qi-drag-handle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 28px; color: var(--text-muted); cursor: grab;
+  border-radius: var(--radius-sm); transition: color .12s, background .12s;
+}
+.qi-drag-handle:hover { color: var(--text); background: var(--surface-hover); }
+.qi-drag-handle:active { cursor: grabbing; }
+.qi-row.qi-dragging { opacity: .4; }
+
+.qi-delete { width: 32px; padding: 0 !important; text-align: center; }
+.qi-del-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  color: var(--text-muted); background: transparent;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  cursor: pointer; transition: color .12s, border-color .12s, background .12s;
+}
+.qi-del-btn:hover { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); background: rgba(239, 68, 68, .08); }
 .qi-row-actions { display: flex; gap: 4px; justify-content: flex-end; }
 .qi-row-actions button {
   display: inline-flex; align-items: center; gap: 4px;
@@ -2021,37 +2055,45 @@ html { scroll-behavior: smooth; }
   color: var(--text-secondary);
 }
 
+/* Parent grid defines the shared column tracks. */
 .detail-links {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.detail-link-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 18px auto 1fr;
+  row-gap: 6px;
+  column-gap: 10px;
   font-size: 13px;
   color: var(--text-muted);
+}
+
+/* Each row uses subgrid so all rows share column widths — labels and URLs
+   line up without the display:contents quirk that left button padding visible. */
+.detail-link-item {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  column-gap: inherit;
+  align-items: start;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   min-width: 0;
 }
+
 .detail-link-item > i,
 .detail-link-item > svg {
-  flex-shrink: 0;
   margin-top: 2px;
+  color: var(--text-muted);
 }
-.detail-link-item code {
-  font-size: 12px;
-  color: var(--text-secondary);
-  word-break: break-all;
-  min-width: 0;
-}
-a.detail-link-item:hover { color: var(--primary); }
 
 .detail-link-label {
   font-weight: 500;
   color: var(--text);
-  flex-shrink: 0;
+  white-space: nowrap;
 }
 .detail-link-url {
   color: var(--text-muted);
@@ -2059,21 +2101,46 @@ a.detail-link-item:hover { color: var(--primary); }
   word-break: break-all;
   min-width: 0;
 }
-a.detail-link-item:hover .detail-link-label { color: var(--primary); }
-
-button.detail-link-item {
-  padding: 0;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  transition: color .15s;
+.detail-link-item code.detail-link-url {
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
-button.detail-link-item:hover { color: var(--primary); }
-button.detail-link-item:hover code { color: var(--primary); }
-button.detail-link-item.copied { color: var(--success); }
-button.detail-link-item.copied code { color: var(--success); }
+
+/* Hover: colour changes cascade to label + url + icon */
+a.detail-link-item:hover .detail-link-label,
+a.detail-link-item:hover .detail-link-url,
+a.detail-link-item:hover > i,
+a.detail-link-item:hover > svg { color: var(--primary); }
+
+button.detail-link-item { background: transparent; border: 0; font-family: inherit; }
+button.detail-link-item:hover .detail-link-label,
+button.detail-link-item:hover .detail-link-url,
+button.detail-link-item:hover > i,
+button.detail-link-item:hover > svg { color: var(--primary); }
+button.detail-link-item.copied .detail-link-label,
+button.detail-link-item.copied .detail-link-url,
+button.detail-link-item.copied > i,
+button.detail-link-item.copied > svg { color: var(--success); }
+
+/* Variant: Web (external URL) — primary/indigo. Chained selector beats the generic
+   a.detail-link-item:hover rules on specificity. */
+.detail-link-item.detail-link-web > i,
+.detail-link-item.detail-link-web > svg { color: var(--primary); }
+.detail-link-item.detail-link-web .detail-link-label { color: var(--primary); font-weight: 600; }
+.detail-link-item.detail-link-web:hover > i,
+.detail-link-item.detail-link-web:hover > svg,
+.detail-link-item.detail-link-web:hover .detail-link-label,
+.detail-link-item.detail-link-web:hover .detail-link-url { color: var(--primary); opacity: .9; }
+
+/* Variant: Path (local filesystem) — amber/warning. */
+.detail-link-item.detail-link-path > i,
+.detail-link-item.detail-link-path > svg { color: var(--warning); }
+.detail-link-item.detail-link-path .detail-link-label { color: var(--warning); font-weight: 600; }
+.detail-link-item.detail-link-path .detail-link-url { color: var(--text-secondary); }
+.detail-link-item.detail-link-path:hover > i,
+.detail-link-item.detail-link-path:hover > svg,
+.detail-link-item.detail-link-path:hover .detail-link-label { color: var(--warning); opacity: .9; }
+.detail-link-item.detail-link-path:hover .detail-link-url { color: var(--warning); }
 
 .detail-actions {
   display: flex;
