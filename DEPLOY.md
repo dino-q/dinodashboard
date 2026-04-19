@@ -137,16 +137,63 @@ git push
 - [ ] 能登入
 - [ ] 截圖顯示正常
 
-## 步驟 6 — UptimeRobot 防止 Render sleep
+## 步驟 6 — cron-job.org 防止 Render sleep
 
-1. 註冊 https://uptimerobot.com（免費方案夠用）
-2. Dashboard → `+ New monitor`
-   - **Monitor Type**：`HTTP(s)`
-   - **Friendly Name**：`DinoDashboard Keepalive`
+### 為什麼選 cron-job.org 而不是 UptimeRobot？
+
+這兩個服務設計目的根本不一樣：
+
+| | cron-job.org | UptimeRobot |
+|---|---|---|
+| **本質** | 排程執行器（遠端 crontab） | 存活監控（健康檢查員） |
+| **它問的問題** | "時間到了該不該 call 這個 URL？" | "這個服務還活著嗎？Uptime 幾 %？" |
+
+我們的 `/ping` 需求本質上是**前者**——定時戳一下讓 Render 醒著，不需要監控統計。所以用排程器是更直覺的選擇。
+
+### 功能比較（都用免費方案）
+
+| 項目 | cron-job.org | UptimeRobot |
+|---|---|---|
+| 最小間隔 | **1 分鐘** | 5 分鐘 |
+| 任務/監控數 | 無硬性上限 | 50 個 |
+| 排程語法 | 標準 cron（`*/5 * * * *`） | 固定下拉選單 |
+| Email 告警 | ✓ | ✓ |
+| Slack/Discord | ✗（付費） | ✓ |
+| Uptime % 統計 | ✗（只有執行紀錄） | ✓ |
+| 公開狀態頁 | ✗ | ✓ |
+| SSL 到期提醒 | ✗ | ✓ |
+| 執行紀錄保留 | 最近 25 次 | 60 天 |
+| 超時上限 | 30 秒 | 60 秒 |
+| Server 位置 | 德國 | 美國 |
+
+### cron-job.org 的限制（老實說）
+
+- **沒有 uptime % 統計圖** — 只知道每次執行是否成功，不會幫你算「本月活了 99.2%」
+- **沒有公開狀態頁** — 想對外放 `status.你的app.com` 給客戶看的話做不到
+- **告警管道只有 email** — 想接 Slack / Discord / LINE 要付費
+- **紀錄只保留 25 次** — 看不到一週前的狀況
+- **UI 比較樸素** — 功能齊全但視覺停在 2010 年代
+
+對個人工具站 keep-alive 來說，這些限制都不重要。未來需要向外展示可靠度時，兩邊可以**同時跑**（cron-job.org 當鬧鐘，UptimeRobot 當儀表板）。
+
+### 設定步驟
+
+1. 註冊 https://cron-job.org（免費，不用信用卡）
+2. Dashboard → `Create cronjob`
+   - **Title**：`DinoDashboard Keepalive`
    - **URL**：`https://你的app.onrender.com/ping`
-   - **Monitoring Interval**：`5 minutes`（免費方案最小值）
-3. `Create Monitor`
-4. 30 分鐘後回來看 — 應該會是綠色 `Up`
+   - **Schedule**：選 `Every 5 minutes`（或自訂 cron `*/5 * * * *`）
+   - **Notifications**：勾 `Failure notification` 寄到你的 email
+3. `Create`
+4. 回 Dashboard，30 分鐘後看 Execution history — 應該會有 6 筆綠色 `OK`
+
+### 驗證 keep-alive 真的有效
+
+等到 cron-job.org 跑過幾次後：
+
+1. 去 Render Dashboard → 你的 service → `Metrics` tab
+2. 看 `Request count` — 應該每 5 分鐘有一根柱子
+3. 看 `Service events` — 不應該再看到 `Service suspended due to inactivity`
 
 ---
 
@@ -164,5 +211,11 @@ git push
 ### 備份
 Supabase Dashboard → `Database → Backups`，免費方案有每日備份保留 7 天。
 
-### 如果 UptimeRobot 不夠用
-另一個免費選項：Cron-job.org 可以每 1 分鐘戳一次。
+### 其他免費 keep-alive 選項（備案）
+
+如果哪天 cron-job.org 也不穩，這些都可以直接替補：
+
+- **GitHub Actions cron**：repo 裡建 `.github/workflows/keepalive.yml` 排 `*/5 * * * *` 跑 `curl /ping`。免費額度每月 2000 分鐘用不到 1%
+- **Cloudflare Workers Cron Triggers**：免費每天 10 萬次請求，最穩
+- **Better Stack（原 Better Uptime）**：3 分鐘間隔 + 漂亮 UI，免費 10 個 monitor
+- **UptimeRobot**：如果之後要 uptime % 統計和狀態頁，隨時可以加回來和 cron-job.org 並用
