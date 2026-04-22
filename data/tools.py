@@ -60,6 +60,87 @@ def _cat_row_to_dict(row: dict) -> dict:
 
 
 # ------------------------------------------------------------------
+# Screenshot normalization
+# ------------------------------------------------------------------
+
+# 每張截圖的樣式欄位與預設值；缺欄位會補上，確保模板永遠拿得到完整 dict。
+_SCREENSHOT_STYLE_DEFAULTS = {
+    "pos_x": 50,       # object-position x %（0 = 左，100 = 右）
+    "pos_y": 50,       # object-position y %
+    "scale": 100,      # transform: scale 百分比
+    "opacity": 100,    # 0–100
+    # brightness 100 = theme-default（在 CSS 裡會乘上 --theme-img-brightness：dark=0.85 / light=1）。
+    # 使用者設 > 100 = 比該 theme 還亮；< 100 = 更暗。值跟 theme 是相對關係，跨 theme 一致。
+    "brightness": 100,
+    "blur": 0,         # px
+}
+
+
+def _normalize_one_screenshot(item: dict) -> dict:
+    """補齊單張截圖的欄位，非 dict 輸入會被忽略（回傳 None）。"""
+    if not isinstance(item, dict):
+        return None
+    url = (item.get("url") or "").strip()
+    if not url:
+        return None
+    out = {
+        "url": url,
+        "object_key": (item.get("object_key") or "").strip(),
+        "is_cover": bool(item.get("is_cover")),
+    }
+    for k, default in _SCREENSHOT_STYLE_DEFAULTS.items():
+        v = item.get(k)
+        try:
+            out[k] = int(v) if v is not None else default
+        except (TypeError, ValueError):
+            out[k] = default
+    return out
+
+
+def _normalize_screenshots(tool: dict) -> dict:
+    """把 tool['screenshots'] 正規化：
+    - DB 回來若是 list，逐筆補欄位；壞資料剔除
+    - DB 為空但有 legacy `screenshot` 欄位 → 合成單張封面
+    - 確保最多一張 is_cover=True（第一張勝出；有就保留）
+    直接 mutate 並回傳 tool。"""
+    raw = tool.get("screenshots")
+    items = []
+    if isinstance(raw, list):
+        for it in raw:
+            norm = _normalize_one_screenshot(it)
+            if norm:
+                items.append(norm)
+
+    if not items:
+        legacy = (tool.get("screenshot") or "").strip()
+        if legacy:
+            items.append(_normalize_one_screenshot({
+                "url": legacy,
+                "object_key": "",
+                "is_cover": True,
+            }))
+
+    # 保證最多一張 is_cover
+    cover_seen = False
+    for it in items:
+        if it["is_cover"] and not cover_seen:
+            cover_seen = True
+        elif it["is_cover"]:
+            it["is_cover"] = False
+
+    tool["screenshots"] = items
+    return tool
+
+
+def get_cover(tool: dict) -> dict | None:
+    """回傳封面那張的 dict，沒設就 None。"""
+    for s in tool.get("screenshots") or []:
+        if s.get("is_cover"):
+            return s
+    return None
+
+
+# ------------------------------------------------------------------
 # Categories
 # ------------------------------------------------------------------
 
@@ -80,7 +161,8 @@ def load_tools() -> list[dict]:
     if cached is not None:
         return cached
     res = (_sb().table("tools").select("*").order("sort_order").execute())
-    return _cache_set("_t_cache_tools", list(res.data or []))
+    rows = [_normalize_screenshots(r) for r in (res.data or [])]
+    return _cache_set("_t_cache_tools", rows)
 
 
 def get_tool(tool_id: str) -> dict | None:
@@ -88,13 +170,13 @@ def get_tool(tool_id: str) -> dict | None:
         return None
     res = _sb().table("tools").select("*").eq("id", tool_id).limit(1).execute()
     rows = res.data or []
-    return rows[0] if rows else None
+    return _normalize_screenshots(rows[0]) if rows else None
 
 
 def get_highlight_tool() -> dict | None:
     res = _sb().table("tools").select("*").eq("highlight", True).limit(1).execute()
     rows = res.data or []
-    return rows[0] if rows else None
+    return _normalize_screenshots(rows[0]) if rows else None
 
 
 def filter_tools(category: str | None = None, q: str | None = None,
@@ -108,7 +190,7 @@ def filter_tools(category: str | None = None, q: str | None = None,
         query = query.eq("status", status)
     if category:
         query = query.eq("category", category)
-    tools = list(query.execute().data or [])
+    tools = [_normalize_screenshots(r) for r in (query.execute().data or [])]
 
     # has_* filters (OR logic)
     has_any = any([has_external, has_local_url, has_notion, has_github, has_gas])
@@ -400,6 +482,8 @@ def add_tool(form: dict) -> dict:
     next_order = (res.data[0]["sort_order"] + 1) if res.data else 0
 
     commands = _parse_commands(form)
+    screenshots = _parse_screenshots_json(form) or []
+    cover_url = next((s["url"] for s in screenshots if s.get("is_cover")), "")
     tool = {
         "id": tool_id,
         "name": form.get("name", ""),
@@ -411,7 +495,8 @@ def add_tool(form: dict) -> dict:
         "color": form.get("color", "#6366F1"),
         "status": form.get("status", "active"),
         "highlight": form.get("highlight") == "on",
-        "screenshot": form.get("screenshot", ""),
+        "screenshot": cover_url or form.get("screenshot", ""),
+        "screenshots": screenshots,
         "path": form.get("path", ""),
         "commands": commands,
         "url": form.get("url", ""),
@@ -447,7 +532,6 @@ def update_tool(tool_id: str, form: dict) -> dict | None:
         "icon": form.get("icon", existing.get("icon", "box")),
         "color": form.get("color", existing.get("color", "#6366F1")),
         "status": form.get("status", existing.get("status", "active")),
-        "screenshot": form.get("screenshot", existing.get("screenshot", "")),
         "path": form.get("path", existing.get("path", "")),
         "commands": commands,
         "url": form.get("url", existing.get("url", "")),
@@ -460,13 +544,40 @@ def update_tool(tool_id: str, form: dict) -> dict | None:
     if "highlight" in form:
         patch["highlight"] = form.get("highlight") == "on"
 
+    # screenshots: 只在表單明確帶了 screenshots_json 才動
+    new_screenshots = _parse_screenshots_json(form)
+    orphan_keys: list[str] = []
+    if new_screenshots is not None:
+        old_keys = {s.get("object_key") for s in (existing.get("screenshots") or []) if s.get("object_key")}
+        new_keys = {s.get("object_key") for s in new_screenshots if s.get("object_key")}
+        orphan_keys = list(old_keys - new_keys)
+        cover_url = next((s["url"] for s in new_screenshots if s.get("is_cover")), "")
+        patch["screenshots"] = new_screenshots
+        patch["screenshot"] = cover_url  # 同步 legacy 欄位
+    else:
+        # 沒帶 screenshots_json 就維持舊 screenshot legacy 欄位（若表單有帶）
+        if "screenshot" in form:
+            patch["screenshot"] = form["screenshot"]
+
     res = sb.table("tools").update(patch).eq("id", tool_id).execute()
     _sync_env_types_from_commands(commands)
+    # Storage 清理：砍掉被使用者移除的舊截圖
+    if orphan_keys:
+        _delete_storage_objects(orphan_keys)
     return res.data[0] if res.data else None
 
 
 def delete_tool(tool_id: str) -> bool:
     _cache_clear_all()
+    # 先把該工具 Storage 底下的所有截圖檔一併清掉
+    try:
+        bucket = _sb().storage.from_("screenshots")
+        objs = bucket.list(tool_id) or []
+        keys = [f"{tool_id}/{o['name']}" for o in objs if o.get("name")]
+        if keys:
+            bucket.remove(keys)
+    except Exception:
+        pass  # Storage 失敗不阻擋 DB 刪除
     res = _sb().table("tools").delete().eq("id", tool_id).execute()
     return bool(res.data)
 
@@ -523,7 +634,7 @@ def toggle_starred(tool_id: str) -> dict | None:
 
 
 def update_screenshot(tool_id: str, url_or_path: str) -> bool:
-    """存截圖的完整公開 URL（從 Supabase Storage 來的）"""
+    """Legacy：存舊的單張 screenshot 欄位。新路徑請用 screenshots helpers。"""
     _cache_clear_all()
     patch = {
         "screenshot": url_or_path,
@@ -531,6 +642,51 @@ def update_screenshot(tool_id: str, url_or_path: str) -> bool:
     }
     res = _sb().table("tools").update(patch).eq("id", tool_id).execute()
     return bool(res.data)
+
+
+# ------------------------------------------------------------------
+# Screenshots — form field parsing + Storage cleanup
+# ------------------------------------------------------------------
+
+def _parse_screenshots_json(form: dict) -> list[dict] | None:
+    """解析 form["screenshots_json"]，回傳正規化過的 list。
+    - 回 None = 表單沒帶這個欄位（不動 DB 現有的 screenshots）
+    - 回 [] = 表單明確清空
+    - 回 [...] = 表單明確覆寫"""
+    import json as _json
+    raw = form.get("screenshots_json")
+    if raw is None:
+        return None
+    try:
+        parsed = _json.loads(raw) if isinstance(raw, str) else raw
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    out = []
+    cover_seen = False
+    for it in parsed:
+        n = _normalize_one_screenshot(it)
+        if not n:
+            continue
+        # 保證最多一張封面
+        if n["is_cover"] and not cover_seen:
+            cover_seen = True
+        elif n["is_cover"]:
+            n["is_cover"] = False
+        out.append(n)
+    return out
+
+
+def _delete_storage_objects(object_keys: list[str]) -> None:
+    """砍 Supabase Storage 的 screenshots bucket 裡的物件。失敗不 raise（容忍離線 / 已不存在）。"""
+    keys = [k for k in object_keys if k]
+    if not keys:
+        return
+    try:
+        _sb().storage.from_("screenshots").remove(keys)
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------

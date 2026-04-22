@@ -32,10 +32,17 @@
   {% endif %}
 
   <!-- Preview — big visual -->
+  {% set cover = (tool.screenshots or []) | selectattr('is_cover') | first %}
   <div class="card-visual">
-    {% if tool.screenshot %}
-      <img src="{{ tool.screenshot if tool.screenshot.startswith('http') else url_for('static', filename=tool.screenshot) }}"
-           alt="{{ tool.name }}" class="card-img" loading="lazy">
+    {% if cover %}
+      <img src="{{ cover.url }}"
+           alt="{{ tool.name }}" class="card-img" loading="lazy"
+           style="--card-pos-x: {{ cover.pos_x }}%;
+                  --card-pos-y: {{ cover.pos_y }}%;
+                  --card-scale: {{ cover.scale / 100 }};
+                  --card-opacity: {{ cover.opacity / 100 }};
+                  --card-brightness: {{ cover.brightness / 100 }};
+                  --card-blur: {{ cover.blur }}px;">
     {% else %}
       <div class="card-terminal">
         <div class="terminal-bar mini">

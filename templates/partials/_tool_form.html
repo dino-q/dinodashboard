@@ -11,7 +11,10 @@
   </button>
 </div>
 
+{% set form_tool_id = tool.id if mode == "edit" else pending_id %}
 <form class="tool-form"
+      data-tool-id="{{ form_tool_id }}"
+      data-mode="{{ mode }}"
       {% if mode == "edit" %}
         hx-post="/api/tool/{{ tool.id }}"
       {% else %}
@@ -19,8 +22,17 @@
       {% endif %}
       hx-target="#tool-grid"
       hx-swap="innerHTML"
-      hx-on::after-request="if(event.detail.successful) closeModal()"
+      hx-on::after-request="if(event.detail.successful) { window.__smSavedOk = true; closeModal(); }"
       enctype="multipart/form-data">
+
+  {# Hidden: pending UUID for new mode so Storage path {tool_id}/... exists before INSERT #}
+  {% if mode != "edit" %}
+    <input type="hidden" name="id" value="{{ pending_id }}">
+  {% endif %}
+
+  {# Hidden: full screenshots state (JSON). Managed by JS; backend parses on submit. #}
+  <input type="hidden" name="screenshots_json" id="screenshots-json"
+         value='{{ (tool.screenshots if tool and tool.screenshots else []) | tojson }}'>
 
   <!-- Chinese name + Description -->
   <div class="form-group">
@@ -191,6 +203,7 @@
            placeholder="https://...">
   </div>
 
+  {# Legacy hidden path — kept for backward-compat; backend syncs to cover URL automatically. #}
   <input type="hidden" name="screenshot" id="screenshot-path"
          value="{{ tool.screenshot if tool else '' }}">
 
@@ -241,20 +254,103 @@
     </button>
   </div>
 
-  <!-- Screenshot (edit only) — after Launch Commands -->
-  {% if mode == "edit" and tool %}
-    <div class="form-group">
-      <label><span class="zh">截圖</span><span class="en">Screenshot</span></label>
-      <div class="screenshot-upload" id="screenshot-upload-{{ tool.id }}">
-        {% if tool.screenshot %}
-          <img src="{{ tool.screenshot if tool.screenshot.startswith('http') else url_for('static', filename=tool.screenshot) }}" class="screenshot-thumb" alt="Current screenshot">
-        {% endif %}
-        <input type="file" accept="image/*"
-               onchange="uploadScreenshot('{{ tool.id }}', this)">
-        <span class="form-hint">PNG, JPG, WebP</span>
+  <!-- Images manager — multi-upload, pick cover, tweak cover style (collapsible) -->
+  <details class="form-group form-collapse">
+    <summary class="form-collapse-head">
+      <i data-lucide="chevron-down" class="form-collapse-chevron" style="width:14px;height:14px"></i>
+      <span class="zh">圖片</span><span class="en">Images</span>
+      <span class="form-collapse-count" id="sm-count-badge" hidden></span>
+    </summary>
+    <div class="screenshots-manager" id="screenshots-manager"
+         data-tool-id="{{ form_tool_id }}"
+         data-initial='{{ (tool.screenshots if tool and tool.screenshots else []) | tojson }}'>
+
+      <!-- Upload button (multi) -->
+      <div class="sm-upload-row">
+        <label class="sm-upload-btn" for="sm-file-input">
+          <i data-lucide="image-plus" style="width:16px;height:16px"></i>
+          <span class="zh">上傳圖片（可多張）</span><span class="en">Upload images (multi)</span>
+        </label>
+        <input type="file" id="sm-file-input" accept="image/*" multiple hidden>
+        <span class="form-hint">
+          <span class="zh">PNG / JPG / WebP / GIF，或直接 Ctrl+V 貼上</span>
+          <span class="en">PNG / JPG / WebP / GIF, or paste with Ctrl+V</span>
+        </span>
+      </div>
+
+      <!-- Cover picker: 不設封面 + 每張一個（click-driven，非 native radio group） -->
+      <div class="sm-cover-row">
+        <button type="button" class="sm-cover-none" id="sm-cover-none-btn">
+          <i data-lucide="circle" class="sm-cover-none-dot" style="width:12px;height:12px"></i>
+          <span class="zh">不設封面（卡片不顯示圖）</span><span class="en">No cover (hide card image)</span>
+        </button>
+      </div>
+
+      <!-- Thumbnail grid -->
+      <div class="sm-grid" id="sm-grid"></div>
+
+      <!-- Cover style controls (only shown when a cover is picked) -->
+      <div class="sm-style-panel" id="sm-style-panel" hidden>
+        <div class="sm-style-head">
+          <span class="zh">封面樣式（只影響卡片縮圖）</span>
+          <span class="en">Cover style (card thumbnail only)</span>
+          <button type="button" class="btn-ghost sm-style-reset" onclick="smResetStyle()">
+            <i data-lucide="rotate-ccw" style="width:12px;height:12px"></i>
+            <span class="zh">重設</span><span class="en">Reset</span>
+          </button>
+        </div>
+
+        <div class="sm-preview" id="sm-preview">
+          <img id="sm-preview-img" alt="">
+        </div>
+
+        <div class="sm-sliders">
+          <label>
+            <span class="sm-slider-label">
+              <span class="zh">水平位置</span><span class="en">Position X</span>
+              <span class="sm-val" id="sm-val-pos_x">50%</span>
+            </span>
+            <input type="range" min="0" max="100" data-style="pos_x" value="50">
+          </label>
+          <label>
+            <span class="sm-slider-label">
+              <span class="zh">垂直位置</span><span class="en">Position Y</span>
+              <span class="sm-val" id="sm-val-pos_y">50%</span>
+            </span>
+            <input type="range" min="0" max="100" data-style="pos_y" value="50">
+          </label>
+          <label>
+            <span class="sm-slider-label">
+              <span class="zh">縮放</span><span class="en">Scale</span>
+              <span class="sm-val" id="sm-val-scale">100%</span>
+            </span>
+            <input type="range" min="50" max="300" data-style="scale" value="100">
+          </label>
+          <label>
+            <span class="sm-slider-label">
+              <span class="zh">透明度</span><span class="en">Opacity</span>
+              <span class="sm-val" id="sm-val-opacity">100%</span>
+            </span>
+            <input type="range" min="0" max="100" data-style="opacity" value="100">
+          </label>
+          <label>
+            <span class="sm-slider-label">
+              <span class="zh">亮度</span><span class="en">Brightness</span>
+              <span class="sm-val" id="sm-val-brightness">100%</span>
+            </span>
+            <input type="range" min="0" max="200" data-style="brightness" value="100">
+          </label>
+          <label>
+            <span class="sm-slider-label">
+              <span class="zh">模糊</span><span class="en">Blur</span>
+              <span class="sm-val" id="sm-val-blur">0px</span>
+            </span>
+            <input type="range" min="0" max="50" data-style="blur" value="0">
+          </label>
+        </div>
       </div>
     </div>
-  {% endif %}
+  </details>
 
   <!-- Submit -->
   <div class="form-actions">

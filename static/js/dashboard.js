@@ -791,8 +791,39 @@ function openModal() {
 }
 
 function closeModal() {
+  // If the screenshots manager was active, reap this-session uploads.
+  // - Save path sets window.__smSavedOk = true; we keep any object_key still referenced in state.items.
+  // - Cancel path has no flag; all session uploads get purged from Storage.
+  if (window.__SM__) smMaybeCleanup();
   document.getElementById('modal-overlay').classList.remove('open');
   document.body.style.overflow = '';
+}
+
+function smMaybeCleanup() {
+  const state = window.__SM__;
+  if (!state || !state.sessionUploads || !state.sessionUploads.length) {
+    window.__smSavedOk = false;
+    return;
+  }
+  let toDelete;
+  if (window.__smSavedOk) {
+    // Save succeeded — only purge uploads the user deleted from state before saving.
+    const kept = new Set(state.items.map(it => it.object_key).filter(Boolean));
+    toDelete = state.sessionUploads.filter(k => !kept.has(k));
+  } else {
+    // Cancel / ESC / outside-click — purge every this-session upload.
+    toDelete = state.sessionUploads.slice();
+  }
+  state.sessionUploads = [];
+  window.__smSavedOk = false;
+  if (!toDelete.length) return;
+  // Fire-and-forget; `keepalive` lets it survive if tab navigates away.
+  fetch('/api/storage/screenshots/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keys: toDelete }),
+    keepalive: true,
+  }).catch(() => {});
 }
 
 function isEditMode() {
@@ -1391,40 +1422,332 @@ function saveQuickInputSettings() {
 }
 
 
-// ---------- Screenshot upload ----------
-function uploadScreenshot(toolId, input) {
-  const file = input.files[0];
-  if (!file) return;
+// ---------- Screenshots manager ----------
+// State lives on `window.__SM__`; committed into #screenshots-json (hidden field) on every mutation.
+// Upload API is stateless — add_tool/update_tool parses screenshots_json on submit.
 
-  const formData = new FormData();
-  formData.append('file', file);
+const SM_STYLE_DEFAULTS = {
+  pos_x: 50, pos_y: 50, scale: 100,
+  // brightness 100 = 當前 theme 的預設（CSS 另外乘 --theme-img-brightness）。
+  opacity: 100, brightness: 100, blur: 0,
+};
+const SM_STYLE_CLAMP = {
+  pos_x: [0, 100], pos_y: [0, 100],
+  scale: [50, 300], opacity: [0, 100],
+  brightness: [0, 200], blur: [0, 50],
+};
 
-  fetch(`/api/tool/${toolId}/screenshot`, {
-    method: 'POST',
-    body: formData,
-  })
+function smInit() {
+  const root = document.getElementById('screenshots-manager');
+  if (!root) return;
+  let initial = [];
+  try { initial = JSON.parse(root.dataset.initial || '[]'); } catch (e) { initial = []; }
+  window.__SM__ = {
+    toolId: root.dataset.toolId,
+    items: (initial || []).map(smNormalize),
+    sessionUploads: [],  // object_keys uploaded during this modal open; cleaned up on cancel/save
+  };
+  smSyncHidden();
+  smRender();
+  // Wire file input
+  const fileInput = document.getElementById('sm-file-input');
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length) smUpload(files);
+      e.target.value = '';  // allow re-selecting same file
+    });
+  }
+  // Wire "no cover" button (click-driven, not a native radio to avoid group-management quirks)
+  const none = root.querySelector('#sm-cover-none-btn');
+  if (none) none.addEventListener('click', () => smSetCoverAt(-1));
+  // Wire style sliders — input for continuous drag, dblclick to snap back to default
+  root.querySelectorAll('.sm-sliders input[type=range]').forEach(slider => {
+    slider.addEventListener('input', (e) => smOnSlider(e.target));
+    slider.addEventListener('dblclick', (e) => {
+      const key = e.currentTarget.dataset.style;
+      const def = SM_STYLE_DEFAULTS[key];
+      if (typeof def !== 'number') return;
+      e.currentTarget.value = def;
+      smOnSlider(e.currentTarget);
+    });
+  });
+  // Paste-to-upload: Ctrl+V with image on clipboard → upload (auto-expands the section)
+  if (!document.body.dataset.smPasteWired) {
+    document.addEventListener('paste', smHandlePaste);
+    document.body.dataset.smPasteWired = '1';
+  }
+}
+
+function smHandlePaste(e) {
+  // Only handle when a manager is in the DOM (i.e., new/edit form is open)
+  const root = document.getElementById('screenshots-manager');
+  if (!root) return;
+  // Don't hijack paste in a text input / textarea / contenteditable
+  const t = e.target;
+  const tag = (t && t.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || (t && t.isContentEditable)) {
+    // But still allow if clipboard has ONLY image data (e.g., screenshot copy)
+    // — text inputs would receive "" in that case anyway.
+    const hasText = Array.from(e.clipboardData?.items || [])
+      .some(it => it.kind === 'string');
+    if (hasText) return;
+  }
+  const items = Array.from(e.clipboardData?.items || []);
+  const files = [];
+  for (const it of items) {
+    if (it.kind !== 'file' || !it.type.startsWith('image/')) continue;
+    const blob = it.getAsFile();
+    if (!blob) continue;
+    const ext = (it.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '');
+    const name = blob.name || `pasted-${Date.now()}.${ext}`;
+    files.push(new File([blob], name, { type: it.type }));
+  }
+  if (!files.length) return;
+  e.preventDefault();
+  // Auto-expand the collapsible image section so user sees feedback
+  const details = document.querySelector('details.form-collapse');
+  if (details && !details.open) details.open = true;
+  smUpload(files);
+}
+
+function smNormalize(raw) {
+  const out = {
+    url: String(raw.url || '').trim(),
+    object_key: String(raw.object_key || '').trim(),
+    is_cover: !!raw.is_cover,
+  };
+  for (const [k, def] of Object.entries(SM_STYLE_DEFAULTS)) {
+    const v = parseInt(raw[k], 10);
+    out[k] = Number.isFinite(v) ? v : def;
+  }
+  return out;
+}
+
+function smSyncHidden() {
+  const hidden = document.getElementById('screenshots-json');
+  if (hidden) hidden.value = JSON.stringify(window.__SM__.items);
+}
+
+function smUpload(files) {
+  const state = window.__SM__;
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f));
+  const btn = document.querySelector('.sm-upload-btn');
+  if (btn) btn.classList.add('loading');
+  fetch(`/api/tool/${state.toolId}/screenshots`, { method: 'POST', body: fd })
     .then(r => r.json())
     .then(data => {
-      if (data.ok) {
-        showToast('Screenshot uploaded!');
-        // Update hidden field
-        const pathInput = document.getElementById('screenshot-path');
-        if (pathInput) pathInput.value = data.path;
-        // Update preview
-        const container = input.closest('.screenshot-upload');
-        let img = container.querySelector('.screenshot-thumb');
-        if (!img) {
-          img = document.createElement('img');
-          img.className = 'screenshot-thumb';
-          container.insertBefore(img, input);
-        }
-        img.src = `/static/${data.path}?t=${Date.now()}`;
+      if (!data.ok) throw new Error(data.error || 'Upload failed');
+      // Append each as normalized item; first upload ever → auto-cover.
+      // Also record in sessionUploads so cancel-close can reap them from Storage.
+      const hadCover = state.items.some(it => it.is_cover);
+      (data.added || []).forEach((up, i) => {
+        const item = smNormalize({ ...up, is_cover: false });
+        if (!hadCover && i === 0) item.is_cover = true;
+        state.items.push(item);
+        if (up.object_key) state.sessionUploads.push(up.object_key);
+      });
+      if (data.failed && data.failed.length) {
+        showToast(`${data.failed.length} 張上傳失敗`, 'error');
       } else {
-        showToast(data.error || 'Upload failed', 'error');
+        showToast(`已上傳 ${(data.added || []).length} 張`);
       }
+      smSyncHidden(); smRender();
     })
-    .catch(() => showToast('Upload failed', 'error'));
+    .catch(err => showToast(err.message || 'Upload failed', 'error'))
+    .finally(() => { if (btn) btn.classList.remove('loading'); });
 }
+
+function smRemoveAt(idx) {
+  const state = window.__SM__;
+  if (idx < 0 || idx >= state.items.length) return;
+  state.items.splice(idx, 1);
+  smSyncHidden(); smRender();
+}
+
+// idx = -1 → clear cover (nothing selected)
+function smSetCoverAt(idx) {
+  const state = window.__SM__;
+  state.items.forEach((it, i) => { it.is_cover = (i === idx); });
+  smSyncHidden(); smRender();
+}
+
+// Snap to the default value when the user lands within ±SNAP of it. Otherwise
+// exact integer control. Prevents scale/opacity/etc from sticking at 99/101.
+const SM_SNAP_RADIUS = 2;
+
+function smOnSlider(slider) {
+  const state = window.__SM__;
+  const cover = state.items.find(it => it.is_cover);
+  if (!cover) return;
+  const key = slider.dataset.style;
+  const [lo, hi] = SM_STYLE_CLAMP[key] || [0, 100];
+  let v = Math.max(lo, Math.min(hi, parseInt(slider.value, 10) || 0));
+  const def = SM_STYLE_DEFAULTS[key];
+  if (typeof def === 'number' && Math.abs(v - def) <= SM_SNAP_RADIUS) {
+    v = def;
+    if (slider.value !== String(v)) slider.value = v;
+  }
+  cover[key] = v;
+  smSyncHidden();
+  smUpdateSliderLabel(key, v);
+  smUpdatePreview(cover);
+}
+
+function smResetStyle() {
+  const state = window.__SM__;
+  const cover = state.items.find(it => it.is_cover);
+  if (!cover) return;
+  Object.assign(cover, SM_STYLE_DEFAULTS);
+  smSyncHidden();
+  smRender();
+}
+
+function smUpdateSliderLabel(key, v) {
+  const el = document.getElementById(`sm-val-${key}`);
+  if (!el) return;
+  el.textContent = key === 'blur' ? `${v}px` : `${v}%`;
+}
+
+function smUpdatePreview(cover) {
+  const img = document.getElementById('sm-preview-img');
+  if (!img) return;
+  if (img.src !== cover.url) img.src = cover.url;
+  // Write all CSS vars; .sm-preview img uses the same vars as .card-img for a truthful preview.
+  img.style.setProperty('--card-pos-x', `${cover.pos_x}%`);
+  img.style.setProperty('--card-pos-y', `${cover.pos_y}%`);
+  img.style.setProperty('--card-scale', cover.scale / 100);
+  img.style.setProperty('--card-opacity', cover.opacity / 100);
+  img.style.setProperty('--card-brightness', cover.brightness / 100);
+  img.style.setProperty('--card-blur', `${cover.blur}px`);
+}
+
+function smRender() {
+  const state = window.__SM__;
+  const grid = document.getElementById('sm-grid');
+  if (!grid) return;
+
+  // Thumbnails — click anywhere on thumb to set it as cover; delete button separately.
+  // We use array index (data-idx) as the click identifier. Using object_key fails for
+  // legacy-synthesized items (object_key="") which would match smSetCoverAt(-1) semantics.
+  grid.innerHTML = state.items.map((it, idx) => `
+    <div class="sm-thumb${it.is_cover ? ' is-cover' : ''}" data-idx="${idx}"
+         title="${it.is_cover ? '目前封面' : '點擊設為封面'}">
+      <img src="${it.url}" alt="">
+      ${it.is_cover ? `
+        <span class="sm-cover-badge">
+          <i data-lucide="star" style="width:12px;height:12px"></i>
+          <span class="zh">封面</span><span class="en">Cover</span>
+        </span>
+      ` : ''}
+      <button type="button" class="sm-thumb-del" title="刪除" aria-label="Delete">
+        <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+      </button>
+    </div>
+  `).join('');
+
+  // One delegated listener on the grid handles cover + delete based on click target.
+  // Avoids re-attaching handlers every render and any stale-closure traps.
+  if (!grid.dataset.wired) {
+    grid.addEventListener('click', (e) => {
+      const thumb = e.target.closest('.sm-thumb');
+      if (!thumb) return;
+      const idx = parseInt(thumb.dataset.idx, 10);
+      if (!Number.isFinite(idx)) return;
+      if (e.target.closest('.sm-thumb-del')) {
+        e.stopPropagation();
+        smRemoveAt(idx);
+        return;
+      }
+      smSetCoverAt(idx);
+    });
+    grid.dataset.wired = '1';
+  }
+
+  // "No cover" button active state — mirrors the cover dot via class
+  const noneBtn = document.getElementById('sm-cover-none-btn');
+  if (noneBtn) noneBtn.classList.toggle('is-active', !state.items.some(it => it.is_cover));
+
+  // Count badge on the collapsed section header — shows N when there are images
+  const countBadge = document.getElementById('sm-count-badge');
+  if (countBadge) {
+    if (state.items.length) {
+      countBadge.textContent = String(state.items.length);
+      countBadge.hidden = false;
+    } else {
+      countBadge.hidden = true;
+    }
+  }
+
+  // Style panel visibility + state
+  const cover = state.items.find(it => it.is_cover);
+  const panel = document.getElementById('sm-style-panel');
+  if (panel) {
+    panel.hidden = !cover;
+    if (cover) {
+      Object.keys(SM_STYLE_DEFAULTS).forEach(k => {
+        const slider = panel.querySelector(`input[data-style="${k}"]`);
+        if (slider) slider.value = cover[k];
+        smUpdateSliderLabel(k, cover[k]);
+      });
+      smUpdatePreview(cover);
+    }
+  }
+
+  // Re-render lucide icons inside the grid
+  if (window.lucide) lucide.createIcons();
+}
+
+// Boot manager whenever a form is swapped in (both new and edit use the same form partial)
+document.body.addEventListener('htmx:afterSwap', (e) => {
+  if (e.detail && e.detail.target && e.detail.target.id === 'modal-content'
+      && document.getElementById('screenshots-manager')) {
+    smInit();
+  }
+});
+
+
+// ---------- Detail screenshots carousel ----------
+// Cycles through all screenshots in the detail view. Click image → new tab (default anchor behavior).
+// Prev/next buttons wrap around. Arrow keys navigate when modal is open in detail mode.
+
+function detailCarouselInit() {
+  const root = document.querySelector('.detail-carousel');
+  if (!root) return;
+  const slides = Array.from(root.querySelectorAll('.detail-slide'));
+  if (slides.length <= 1) return;
+  const counter = root.querySelector('.cc-current');
+  const start = parseInt(root.dataset.start || '0', 10) || 0;
+  const state = { idx: start, count: slides.length };
+
+  function show(idx) {
+    state.idx = ((idx % state.count) + state.count) % state.count;
+    slides.forEach((s, i) => s.classList.toggle('is-active', i === state.idx));
+    if (counter) counter.textContent = String(state.idx + 1);
+  }
+
+  root.querySelector('.detail-carousel-nav.prev')
+      ?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); show(state.idx - 1); });
+  root.querySelector('.detail-carousel-nav.next')
+      ?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); show(state.idx + 1); });
+}
+
+document.body.addEventListener('htmx:afterSwap', (e) => {
+  if (e.detail && e.detail.target && e.detail.target.id === 'modal-content') {
+    detailCarouselInit();
+  }
+});
+
+// Arrow keys navigate when detail modal is open (not in edit form)
+document.addEventListener('keydown', (e) => {
+  const root = document.querySelector('#modal-overlay.open .detail-carousel');
+  if (!root) return;
+  if (document.querySelector('#modal-content .tool-form')) return;  // editing — don't hijack keys
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const btn = root.querySelector(e.key === 'ArrowLeft' ? '.detail-carousel-nav.prev' : '.detail-carousel-nav.next');
+  if (btn) { e.preventDefault(); btn.click(); }
+});
 
 
 // ---------- Auto-tag based on brand categories ----------
@@ -1506,4 +1829,60 @@ function setFilterCategory(pillBtn, catId) {
   if (hidden) hidden.value = catId;
   document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
   if (pillBtn) pillBtn.classList.add('active');
+  // Keep the "..." dropdown's highlight in sync (menu + row use separate DOM nodes)
+  document.querySelectorAll('.filter-pills-more-item').forEach(m => {
+    m.classList.toggle('active', m.dataset.catId === catId);
+  });
 }
+
+// ---------- Filter pills overflow dropdown ----------
+function toggleFilterMore(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('filter-pills-more-menu');
+  if (!menu) return;
+  menu.hidden = !menu.hidden;
+  if (window.lucide && !menu.hidden) lucide.createIcons();
+}
+
+function closeFilterMore() {
+  const menu = document.getElementById('filter-pills-more-menu');
+  if (menu) menu.hidden = true;
+}
+
+// Click a category from the overflow menu → mirror selection onto the matching
+// pill (so the pill-row highlight stays correct), then close the menu.
+function pickCategoryFromMore(item, catId) {
+  const rowPill = document.querySelector(`.filter-pill[data-cat-id="${CSS.escape(catId)}"]`);
+  setFilterCategory(rowPill, catId);
+  // Also scroll the matching pill into view so the user sees which one they picked
+  if (rowPill && rowPill.scrollIntoView) {
+    rowPill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+  closeFilterMore();
+}
+
+// Show/hide "..." button based on actual overflow in the pill scroller
+function updateFilterPillsOverflow() {
+  const scroll = document.querySelector('.filter-pills-scroll');
+  const wrap = document.getElementById('filter-pills-more-wrap');
+  if (!scroll || !wrap) return;
+  const overflowing = scroll.scrollWidth > scroll.clientWidth + 1;  // +1 tolerates rounding
+  wrap.hidden = !overflowing;
+  if (!overflowing) closeFilterMore();
+}
+
+document.addEventListener('DOMContentLoaded', updateFilterPillsOverflow);
+window.addEventListener('resize', updateFilterPillsOverflow);
+// Re-check after any HTMX swap (category add/remove re-renders the grid but
+// the filter-bar itself isn't swapped — still, font-loading / zoom etc can change widths)
+document.body.addEventListener('htmx:afterSwap', updateFilterPillsOverflow);
+
+// Close menu on outside click / ESC
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('filter-pills-more-wrap');
+  if (!wrap || wrap.hidden) return;
+  if (!wrap.contains(e.target)) closeFilterMore();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeFilterMore();
+});

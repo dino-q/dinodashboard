@@ -144,7 +144,7 @@
       <input type="hidden" id="filter-category" name="category" value="{{ active_category or '' }}">
 
       <button type="button"
-              class="filter-pill {{ 'active' if not active_category }}"
+              class="filter-pill filter-pill-all {{ 'active' if not active_category }}"
               onclick="setFilterCategory(this, '')"
               hx-get="/api/tools"
               hx-include="#filter-category, #filter-menu, .search-input"
@@ -153,21 +153,47 @@
               hx-swap="innerHTML">
         <span class="zh">全部</span><span class="en">All</span>
       </button>
-      {% for cat in categories %}
-        <button type="button"
-                class="filter-pill {{ 'active' if active_category == cat.id }}"
-                onclick="setFilterCategory(this, '{{ cat.id }}')"
-                hx-get="/api/tools"
-                hx-include="#filter-category, #filter-menu, .search-input"
-                hx-sync="closest .filter-bar:replace"
-                hx-target="#tool-grid"
-                hx-swap="innerHTML">
-          <i data-lucide="{{ cat.icon }}" style="width:14px;height:14px"></i>
-          {{ cat.name_zh }}
+      <div class="filter-pills-scroll">
+        {% for cat in categories %}
+          <button type="button"
+                  class="filter-pill {{ 'active' if active_category == cat.id }}"
+                  data-cat-id="{{ cat.id }}"
+                  onclick="setFilterCategory(this, '{{ cat.id }}')"
+                  hx-get="/api/tools"
+                  hx-include="#filter-category, #filter-menu, .search-input"
+                  hx-sync="closest .filter-bar:replace"
+                  hx-target="#tool-grid"
+                  hx-swap="innerHTML">
+            <i data-lucide="{{ cat.icon }}" style="width:14px;height:14px"></i>
+            {{ cat.name_zh }}
+          </button>
+        {% endfor %}
+      </div>
+      <!-- Overflow menu: only shows when pills overflow. Lists ALL categories for easy picking. -->
+      <div class="filter-pills-more-wrap" id="filter-pills-more-wrap" hidden>
+        <button type="button" class="filter-add-btn filter-pills-more-btn"
+                onclick="toggleFilterMore(event)"
+                title="全部分類"
+                aria-label="All categories">
+          <i data-lucide="more-horizontal" style="width:18px;height:18px"></i>
         </button>
-      {% endfor %}
-
-      <div class="filter-spacer"></div>
+        <div class="filter-pills-more-menu" id="filter-pills-more-menu" hidden>
+          {% for cat in categories %}
+            <button type="button"
+                    class="filter-pills-more-item {{ 'active' if active_category == cat.id }}"
+                    data-cat-id="{{ cat.id }}"
+                    onclick="pickCategoryFromMore(this, '{{ cat.id }}')"
+                    hx-get="/api/tools"
+                    hx-include="#filter-category, #filter-menu, .search-input"
+                    hx-sync="closest .filter-bar:replace"
+                    hx-target="#tool-grid"
+                    hx-swap="innerHTML">
+              <i data-lucide="{{ cat.icon }}" style="width:14px;height:14px"></i>
+              {{ cat.name_zh }}
+            </button>
+          {% endfor %}
+        </div>
+      </div>
 
       {% if is_editor %}
         <button class="filter-add-btn"

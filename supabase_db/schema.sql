@@ -43,7 +43,8 @@ CREATE TABLE tools (
   status            TEXT NOT NULL DEFAULT 'active',
   highlight         BOOLEAN NOT NULL DEFAULT false,
   starred           BOOLEAN NOT NULL DEFAULT false,
-  screenshot        TEXT NOT NULL DEFAULT '',             -- 存 Storage 裡的檔名
+  screenshot        TEXT NOT NULL DEFAULT '',             -- 存 Storage 裡的檔名（legacy，保留做向後相容）
+  screenshots       JSONB NOT NULL DEFAULT '[]'::jsonb,   -- 多張截圖 + 樣式：[{url, object_key, is_cover, pos_x, pos_y, scale, opacity, brightness, blur}]
   path              TEXT NOT NULL DEFAULT '',
   commands          JSONB NOT NULL DEFAULT '[]'::jsonb,   -- 物件陣列：{label,cmd,env,pinned}
   url               TEXT NOT NULL DEFAULT '',

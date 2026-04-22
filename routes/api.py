@@ -7,6 +7,7 @@ import random
 import re
 import urllib.request
 import urllib.parse
+import uuid
 
 from flask import Blueprint, request, render_template, make_response, jsonify
 
@@ -138,9 +139,13 @@ def new_form():
     default_color = random.choice(ACCENT_PALETTE)
     env_types = load_env_types()
     quick_inputs = load_quick_inputs()
+    # Pre-assign UUID so screenshot upload URL `/api/tool/<id>/screenshots` has
+    # a stable target before the tool is persisted. add_tool honors form.id.
+    pending_id = uuid.uuid4().hex
     return render_template("partials/_tool_form.html", tool=None, categories=categories,
                            mode="new", palette=ACCENT_PALETTE, default_color=default_color,
-                           env_types=env_types, quick_inputs=quick_inputs)
+                           env_types=env_types, quick_inputs=quick_inputs,
+                           pending_id=pending_id)
 
 
 @bp.route("/tool/<tool_id>", methods=["POST"])
@@ -222,45 +227,69 @@ _MIME_BY_EXT = {
 }
 
 
-@bp.route("/tool/<tool_id>/screenshot", methods=["POST"])
-@editor_required
-def upload_screenshot(tool_id):
-    if "file" not in request.files:
-        return jsonify({"error": "No file"}), 400
-    f = request.files["file"]
-    if not f.filename or not _allowed_file(f.filename):
-        return jsonify({"error": "Invalid file type"}), 400
-
-    ext = f.filename.rsplit(".", 1)[1].lower()
-    object_key = f"{tool_id}.{ext}"
-
-    sb = get_client()
-    bucket = sb.storage.from_("screenshots")
-
-    # 清掉舊的（不同副檔名會殘留）
-    try:
-        existing = bucket.list() or []
-        to_remove = [o["name"] for o in existing
-                     if o["name"].rsplit(".", 1)[0] == tool_id and o["name"] != object_key]
-        if to_remove:
-            bucket.remove(to_remove)
-    except Exception:
-        pass  # list 失敗不阻擋上傳
-
-    # 上傳（upsert 覆蓋同名）
-    content = f.read()
+def _upload_one(bucket, tool_id: str, file_storage) -> dict | None:
+    """把單一檔案丟進 Storage `{tool_id}/{uuid}.{ext}`，回傳 {url, object_key}。失敗回 None。"""
+    if not file_storage or not file_storage.filename or not _allowed_file(file_storage.filename):
+        return None
+    ext = file_storage.filename.rsplit(".", 1)[1].lower()
+    object_key = f"{tool_id}/{uuid.uuid4().hex}.{ext}"
+    content = file_storage.read()
     bucket.upload(
         path=object_key,
         file=content,
         file_options={
             "content-type": _MIME_BY_EXT.get(ext, "application/octet-stream"),
-            "upsert": "true",
+            "upsert": "false",
         },
     )
-    public_url = bucket.get_public_url(object_key)
+    return {"url": bucket.get_public_url(object_key), "object_key": object_key}
 
-    update_screenshot(tool_id, public_url)
-    return jsonify({"ok": True, "path": public_url})
+
+# ---- Stateless screenshot upload ----
+# 只把檔案塞進 Storage，不動 DB。表單送出時 add_tool/update_tool 會把 screenshots_json 寫進 JSONB。
+# 這允許 new-tool 模式在工具還沒存進 DB 前就能上傳圖片（用 client 生的 UUID 作 tool_id）。
+
+@bp.route("/tool/<tool_id>/screenshots", methods=["POST"])
+@editor_required
+def upload_screenshots(tool_id):
+    files = request.files.getlist("files") or ([request.files["file"]] if "file" in request.files else [])
+    if not files:
+        return jsonify({"error": "No files"}), 400
+
+    bucket = get_client().storage.from_("screenshots")
+    added = []
+    failed = []
+    for f in files:
+        up = _upload_one(bucket, tool_id, f)
+        if up:
+            added.append(up)
+        else:
+            failed.append(f.filename or "")
+
+    if not added:
+        return jsonify({"error": "All uploads failed", "failed": failed}), 400
+
+    return jsonify({"ok": True, "added": added, "failed": failed})
+
+
+@bp.route("/storage/screenshots/delete", methods=["POST"])
+@editor_required
+def delete_storage_screenshots():
+    """Remove one-or-many objects from the screenshots bucket. No DB touched.
+    Used by the form's cancel path to drop this-session uploads the user didn't keep.
+    Idempotent — missing objects don't fail."""
+    body = request.get_json(silent=True) or {}
+    keys = body.get("keys") or []
+    if not isinstance(keys, list):
+        return jsonify({"error": "invalid keys"}), 400
+    keys = [str(k) for k in keys if k]
+    if not keys:
+        return jsonify({"ok": True, "removed": 0})
+    try:
+        get_client().storage.from_("screenshots").remove(keys)
+    except Exception:
+        pass  # best-effort
+    return jsonify({"ok": True, "removed": len(keys)})
 
 
 # ------------------------------------------------------------------

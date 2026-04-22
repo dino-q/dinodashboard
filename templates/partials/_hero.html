@@ -2,10 +2,17 @@
 <div class="featured-card" style="--card-accent: {{ hero.color }}">
   <div class="featured-inner">
     <!-- Left: Preview -->
+    {% set hero_cover = (hero.screenshots or []) | selectattr('is_cover') | first %}
     <div class="featured-preview">
-      {% if hero.screenshot %}
-        <img src="{{ hero.screenshot if hero.screenshot.startswith('http') else url_for('static', filename=hero.screenshot) }}"
-             alt="{{ hero.name }}" class="featured-img" loading="lazy">
+      {% if hero_cover %}
+        <img src="{{ hero_cover.url }}"
+             alt="{{ hero.name }}" class="featured-img" loading="lazy"
+             style="--card-pos-x: {{ hero_cover.pos_x }}%;
+                    --card-pos-y: {{ hero_cover.pos_y }}%;
+                    --card-scale: {{ hero_cover.scale / 100 }};
+                    --card-opacity: {{ hero_cover.opacity / 100 }};
+                    --card-brightness: {{ hero_cover.brightness / 100 }};
+                    --card-blur: {{ hero_cover.blur }}px;">
       {% else %}
         <div class="featured-terminal">
           <div class="terminal-bar">
