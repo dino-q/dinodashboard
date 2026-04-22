@@ -421,13 +421,25 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
       requestAnimationFrame(() => {
         const preferLine = 80; // px below viewport top — what "currently reading" means
         let activeGroup = null;
-        let bestDist = Infinity;
-        groups.forEach(g => {
-          const top = g.getBoundingClientRect().top;
-          if (top > preferLine) return; // heading not yet reached
-          const dist = preferLine - top; // 0 when heading is at preferLine; grows as it scrolls past
-          if (dist < bestDist) { bestDist = dist; activeGroup = g; }
-        });
+
+        // Near-bottom override: if the user has scrolled to (or very close to) the
+        // end of the container, force the last group active. Otherwise a short
+        // final group whose heading never crosses preferLine gets skipped and the
+        // previous group stays highlighted. (This used to bite 系統; now 其他.)
+        const maxScroll = container.scrollHeight - container.clientHeight;
+        const nearBottom = maxScroll > 0 && container.scrollTop >= maxScroll - 4;
+        if (nearBottom && groups.length) {
+          activeGroup = groups[groups.length - 1];
+        } else {
+          let bestDist = Infinity;
+          groups.forEach(g => {
+            const top = g.getBoundingClientRect().top;
+            if (top > preferLine) return; // heading not yet reached
+            const dist = preferLine - top; // 0 when heading is at preferLine; grows as it scrolls past
+            if (dist < bestDist) { bestDist = dist; activeGroup = g; }
+          });
+        }
+
         const activeId = activeGroup ? activeGroup.id : '';
         tocLinks.forEach(link => {
           link.classList.toggle('active', link.getAttribute('href') === '#' + activeId);
