@@ -3,6 +3,7 @@ Tools / categories / env_types / quick_inputs — Supabase-backed CRUD.
 
 對外 API 跟原本的 YAML 版本一模一樣，讓 routes/api.py 完全不用改。
 """
+import base64
 import re
 from datetime import date
 
@@ -706,14 +707,32 @@ def _parse_tags(tags_str) -> list[str]:
     return [t.strip() for t in str(tags_str or "").split(",") if t.strip()]
 
 
+_CMD_B64_PREFIX = "__b64__"
+
+
+def _decode_cmd_value(v):
+    # JS wraps cmd values with this prefix so Render's edge WAF doesn't 403
+    # on patterns like `python -m http.server` (OWASP CRS 933160). Raw
+    # strings pass through unchanged for backward compat.
+    if not isinstance(v, str) or not v.startswith(_CMD_B64_PREFIX):
+        return v or ""
+    try:
+        return base64.b64decode(v[len(_CMD_B64_PREFIX):]).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        # Decode failed — return raw so the row isn't silently dropped;
+        # the user sees the garbled value and can re-save.
+        return v
+
+
 def _parse_commands(form: dict) -> list[dict]:
     commands = []
     i = 0
     while True:
         label = form.get(f"cmd_label_{i}")
-        cmd = form.get(f"cmd_cmd_{i}")
-        if label is None and cmd is None:
+        cmd_raw = form.get(f"cmd_cmd_{i}")
+        if label is None and cmd_raw is None:
             break
+        cmd = _decode_cmd_value(cmd_raw)
         if cmd and cmd.strip():
             commands.append({
                 "label": (label or "").strip() or f"Command {i+1}",

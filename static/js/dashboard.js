@@ -870,6 +870,32 @@ document.body.addEventListener('htmx:afterRequest', (e) => {
   if (btn && btn.dataset.origText) { btn.disabled = false; btn.innerHTML = btn.dataset.origText; }
 });
 
+// Base64-wrap launch command values so Render's edge WAF doesn't 403 on
+// patterns like `python -m http.server` (OWASP CRS 933160). Server-side
+// `_decode_cmd_value` reverses it; raw values still work for back-compat.
+document.body.addEventListener('htmx:configRequest', (e) => {
+  const path = e.detail && e.detail.path;
+  if (!path || path.indexOf('/api/tool') !== 0) return;
+  const params = e.detail.parameters;
+  if (!params) return;
+  const enc = (typeof TextEncoder !== 'undefined') ? new TextEncoder() : null;
+  Object.keys(params).forEach(key => {
+    if (!/^cmd_cmd_\d+$/.test(key)) return;
+    const v = params[key];
+    if (typeof v !== 'string' || !v) return;
+    if (v.indexOf('__b64__') === 0) return;  // already wrapped — don't double-encode
+    let bin;
+    if (enc) {
+      const bytes = enc.encode(v);
+      bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    } else {
+      bin = unescape(encodeURIComponent(v));
+    }
+    params[key] = '__b64__' + btoa(bin);
+  });
+});
+
 // Modal content loading placeholder — avoids the blank backdrop flash while the
 // detail / edit partial is in flight. Fires for any HTMX request that targets
 // #modal-content (card click, Edit from card menu, New tool).
