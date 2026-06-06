@@ -437,7 +437,136 @@ html { scroll-behavior: smooth; }
 }
 .view-toggle-btn:hover { color: var(--text); }
 .view-toggle-btn.active { color: var(--primary); }
+/* a11y: 鍵盤使用者能看到目前焦點在哪個 view */
+.view-toggle-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
 .view-toggle-sep { color: var(--text-muted); opacity: .4; font-weight: 400; }
+
+/* =====================================================
+   LOCAL VIEW — localhost port → tool map
+   (toggled via .show-local on #projects)
+   ===================================================== */
+.local-view { display: none; }
+.projects-section.show-local .filter-bar,
+.projects-section.show-local .projects-layout,
+.projects-section.show-local > .section-inner > .section-title { display: none; }
+.projects-section.show-local .local-view { display: block; }
+
+.local-view-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  /* local mode 隱藏了 section-title，補上 top margin 讓 hint 與 filter-bar 被隱藏後的位置對齊 */
+  margin: 8px 0 16px;
+}
+
+.local-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* 4px 太緊，6px 更有呼吸感，同時仍比卡片 gap 小以示密度差異 */
+  max-width: 760px;
+}
+
+.local-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px; /* 對齊 list gap，讓 copy 按鈕視覺間距一致 */
+}
+
+.local-row-link {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 72px minmax(120px, 1fr) minmax(0, 1.4fr) 16px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md); /* 統一用 token(12px)，不硬編碼 10px */
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  /* 移除 translateX hover — 整列動但 copy 按鈕留在原位會造成錯位感 */
+  transition: border-color .15s, background .15s;
+}
+.local-row-link:hover {
+  border-color: var(--card-accent, var(--primary));
+  background: var(--surface-hover);
+}
+/* a11y: 鍵盤 focus 與滑鼠 hover 同等可見度 */
+.local-row-link:focus-visible {
+  outline: 2px solid var(--card-accent, var(--primary));
+  outline-offset: 2px;
+}
+
+.local-port {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 0;
+  border-radius: var(--radius-sm); /* 對齊 token(8px) */
+  color: var(--card-accent, var(--primary));
+  background: color-mix(in srgb, var(--card-accent, var(--primary)) 14%, transparent);
+  letter-spacing: .02em;
+}
+.local-port-na {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.local-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local-url {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local-open-icon { color: var(--text-muted); opacity: .5; }
+.local-row-link:hover .local-open-icon { opacity: 1; color: var(--card-accent, var(--primary)); }
+
+.local-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0; /* 防止在 flex 容器被壓縮變形 */
+  width: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md); /* 與 local-row-link 保持一致 */
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.local-copy-btn:hover { color: var(--text); border-color: var(--primary); background: var(--surface-hover); }
+.local-copy-btn.copied { color: var(--success); border-color: var(--success); }
+/* a11y: focus ring */
+.local-copy-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .local-row-link {
+    grid-template-columns: 60px 1fr 16px;
+    gap: 10px;
+  }
+  .local-url { display: none; }
+}
 
 /* =====================================================
    LIST VIEW — compact row per tool (toggled via .view-list on #tool-grid)

@@ -601,14 +601,20 @@ function setViewMode(mode) {
 }
 
 function applyViewMode(mode) {
+  const isLocal = mode === 'local';
+  const section = document.getElementById('projects');
+  if (section) section.classList.toggle('show-local', isLocal);
+
   const grid = document.getElementById('tool-grid');
   if (grid) {
     grid.classList.toggle('view-list', mode === 'list');
-    grid.classList.toggle('view-cards', mode !== 'list');
+    grid.classList.toggle('view-cards', mode === 'cards');
   }
   document.querySelectorAll('.view-toggle-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === mode);
   });
+  // Lucide icons inside the local view render after first switch — refresh.
+  if (isLocal && window.lucide) window.lucide.createIcons();
 }
 
 // Apply on load + after any HTMX grid swap (so re-rendered grid keeps the mode)
