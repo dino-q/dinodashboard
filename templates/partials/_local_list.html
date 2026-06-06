@@ -1,0 +1,42 @@
+<p class="local-view-hint">
+  <span class="zh">本機開發伺服器的 port 對照。點一下開啟卡片詳情，右側可複製網址。</span>
+  <span class="en">Localhost dev-server port map. Click a row for details, copy the URL on the right.</span>
+</p>
+{% if local_map %}
+  <ul class="local-list">
+    {% for item in local_map %}
+      <li class="local-row" style="--card-accent: {{ item.color }}">
+        <div class="local-row-link"
+             role="button" tabindex="0"
+             hx-get="/api/tool/{{ item.id }}/detail"
+             hx-target="#modal-content"
+             hx-swap="innerHTML"
+             onclick="openModal()"
+             title="檢視 {{ item.name_zh }}" aria-label="檢視 {{ item.name_zh }}">
+          <span class="local-port{% if item.port is none %} local-port-na{% endif %}">
+            {% if item.port is not none %}{{ item.port }}{% else %}—{% endif %}
+          </span>
+          <span class="local-name">
+            <span class="zh">{{ item.name_zh }}</span>
+            <span class="en">{{ item.name }}</span>
+          </span>
+          <span class="local-url">{{ item.url }}</span>
+          <i data-lucide="eye" class="local-open-icon" style="width:14px;height:14px"></i>
+        </div>
+        <button type="button" class="local-copy-btn"
+                onclick='copyCmd(this, {{ item.url | tojson }})'
+                title="複製網址" aria-label="Copy URL">
+          <i data-lucide="copy" style="width:14px;height:14px"></i>
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <div class="empty-state">
+    <i data-lucide="monitor-off" style="width:48px;height:48px"></i>
+    <p>
+      <span class="zh">還沒有任何本地網址</span>
+      <span class="en">No local URLs yet</span>
+    </p>
+  </div>
+{% endif %}

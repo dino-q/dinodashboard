@@ -6,6 +6,7 @@ Tools / categories / env_types / quick_inputs — Supabase-backed CRUD.
 import base64
 import re
 from datetime import date
+from urllib.parse import urlparse
 
 from data.supabase_client import get_client
 
@@ -258,6 +259,50 @@ def tools_grouped_by_category(category: str | None = None, q: str | None = None,
             "tools": uncategorized,
         })
     return groups
+
+
+# ------------------------------------------------------------------
+# Local URL map（「本地」分頁用）
+# ------------------------------------------------------------------
+
+def _local_url_info(url: str):
+    """把工具的本地網址解析成 (port, host)。
+    支援 `http://localhost:5050`、`localhost:5050`、`127.0.0.1:8000/path` 等寫法。
+    無 port 回傳 (None, host)；解析失敗回傳 (None, "")。"""
+    u = (url or "").strip()
+    if not u:
+        return None, ""
+    if "://" not in u:
+        u = "http://" + u
+    try:
+        parsed = urlparse(u)
+        return parsed.port, (parsed.hostname or "").lower()
+    except ValueError:
+        return None, ""
+
+
+def build_local_map(tools: list[dict]) -> list[dict]:
+    """產生「本地」分頁用的 port → 工具 對照清單，依 port 由小到大排序（無 port 排最後）。"""
+    rows = []
+    for t in tools:
+        url = (t.get("url") or "").strip()
+        if not url:
+            continue
+        port, host = _local_url_info(url)
+        rows.append({
+            "id": t.get("id"),
+            "name": t.get("name") or t.get("id"),
+            "name_zh": t.get("name_zh") or t.get("name") or t.get("id"),
+            "url": url,
+            "port": port,
+            "host": host,
+            "color": t.get("color") or "#6366F1",
+            "icon": t.get("icon") or "box",
+            "category": t.get("category"),
+            "status": t.get("status"),
+        })
+    rows.sort(key=lambda r: (r["port"] is None, r["port"] or 0, r["name_zh"]))
+    return rows
 
 
 # ------------------------------------------------------------------

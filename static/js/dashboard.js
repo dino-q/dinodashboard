@@ -283,6 +283,10 @@ document.addEventListener('DOMContentLoaded', () => {
 document.body.addEventListener('htmx:afterSwap', () => {
   lucide.createIcons();
 });
+// afterSettle 在含 OOB 的整個回應安定後才觸發 — 確保 OOB 換進來的 #local-view 內 icon 也重繪
+document.body.addEventListener('htmx:afterSettle', () => {
+  lucide.createIcons();
+});
 
 
 // ---------- Preserve scroll position across grid swaps ----------

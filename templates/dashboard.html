@@ -332,43 +332,9 @@
     </div>
 
     <!-- ===== LOCAL VIEW — localhost port → tool map (toggled via .show-local on #projects) ===== -->
+    <!-- 內層抽成 partials/_local_list.html，HTMX CRUD 回應用 _local_oob.html 就地刷新（無需 F5） -->
     <div class="local-view" id="local-view">
-      <p class="local-view-hint">
-        <span class="zh">本機開發伺服器的 port 對照。點一下即可開啟。</span>
-        <span class="en">Localhost dev-server port map. Click to open.</span>
-      </p>
-      {% if local_map %}
-        <ul class="local-list">
-          {% for item in local_map %}
-            <li class="local-row" style="--card-accent: {{ item.color }}">
-              <a class="local-row-link" href="{{ item.url }}" target="_blank" rel="noopener">
-                <span class="local-port{% if item.port is none %} local-port-na{% endif %}">
-                  {% if item.port is not none %}{{ item.port }}{% else %}—{% endif %}
-                </span>
-                <span class="local-name">
-                  <span class="zh">{{ item.name_zh }}</span>
-                  <span class="en">{{ item.name }}</span>
-                </span>
-                <span class="local-url">{{ item.url }}</span>
-                <i data-lucide="external-link" class="local-open-icon" style="width:14px;height:14px"></i>
-              </a>
-              <button type="button" class="local-copy-btn"
-                      onclick='copyCmd(this, {{ item.url | tojson }})'
-                      title="複製網址" aria-label="Copy URL">
-                <i data-lucide="copy" style="width:14px;height:14px"></i>
-              </button>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <div class="empty-state">
-          <i data-lucide="monitor-off" style="width:48px;height:48px"></i>
-          <p>
-            <span class="zh">還沒有任何本地網址</span>
-            <span class="en">No local URLs yet</span>
-          </p>
-        </div>
-      {% endif %}
+      {% include "partials/_local_list.html" %}
     </div>
   </div>
 

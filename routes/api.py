@@ -16,7 +16,7 @@ from data.tools import (
     load_tools, load_categories, get_tool, get_highlight_tool,
     tools_grouped_by_category, add_tool, update_tool, delete_tool,
     update_screenshot, toggle_starred, reorder_tool, load_env_types,
-    load_quick_inputs, save_quick_input_settings,
+    load_quick_inputs, save_quick_input_settings, build_local_map,
 )
 from data.auto_tag import auto_tag_all
 from routes.auth import login_required, editor_required
@@ -69,6 +69,8 @@ def _grid_response(category=None, q=None, toast_msg=None, include_oob=True, stat
     if include_oob:
         html += render_template("partials/_featured_oob.html", hero=hero)
         html += render_template("partials/_toc_oob.html", groups=groups)
+        # 同步刷新「本地」分頁(port → 工具對照)，免使用者 F5
+        html += render_template("partials/_local_oob.html", local_map=build_local_map(load_tools()))
     resp = make_response(html)
     if toast_msg:
         resp.headers["HX-Trigger"] = json.dumps({"showToast": toast_msg})
