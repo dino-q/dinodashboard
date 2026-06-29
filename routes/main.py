@@ -19,6 +19,22 @@ def ping():
     return "ok", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
+# 保活（含 DB）：跟 /ping 一樣防 Render sleep，但會「真的查一次 Supabase」。
+# 免費版 Supabase 連續 7 天「資料庫零活動」就會自動暫停（2026-06 踩過：keep-alive
+# 只打 /ping 不碰 DB → Render 醒著但 Supabase 看不到活動 → 被暫停 → 全站 500）。
+# 把 cron-job.org 的排程改打這條，就能讓 Supabase 每次都看到一筆查詢、不再閒置暫停。
+# 查詢極輕量（select 1 筆 id）；失敗回 503 讓 cron 寄失敗通知，當作 DB 不可用的早期警報。
+@bp.route("/ping-db")
+def ping_db():
+    from data.supabase_client import get_client
+    try:
+        get_client().table("tools").select("id").limit(1).execute()
+    except Exception as e:
+        return f"db-unreachable: {type(e).__name__}", 503, \
+            {"Content-Type": "text/plain; charset=utf-8"}
+    return "ok", 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
 @bp.route("/")
 def index():
     # Private mode gate (set via PRIVATE_MODE env var on cloud deploys)
