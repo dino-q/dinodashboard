@@ -6,6 +6,8 @@ credentials.json
 !.env.example
 *.pem
 *.key
+# 本機專用腳本（可能含連線資訊），比照全域 *.local.* 慣例
+*.local.*
 
 # === Python ===
 __pycache__/

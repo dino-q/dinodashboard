@@ -279,11 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 })();
 
-// Re-init icons after HTMX swaps
-document.body.addEventListener('htmx:afterSwap', () => {
-  lucide.createIcons();
-});
-// afterSettle 在含 OOB 的整個回應安定後才觸發 — 確保 OOB 換進來的 #local-view 內 icon 也重繪
+// Re-init icons after HTMX swaps — 只掛 afterSettle 一處。
+// afterSettle 在含 OOB 的整個回應安定後才觸發（含 #local-view），足以涵蓋所有 swap；
+// 之前 afterSwap + afterSettle 各掛一次 = 每次 swap 全頁掃兩遍 icon，白吃主執行緒。
 document.body.addEventListener('htmx:afterSettle', () => {
   lucide.createIcons();
 });
@@ -331,17 +329,30 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
   const btn = document.getElementById('back-to-top');
   if (!container) return;
 
-  const snapCount = container.querySelectorAll('.snap-page:not(.projects-section)').length;
+  // 動態計算：精選區沒有 highlight 工具時帶 .featured-hidden（display:none、零高度），
+  // 而且這個 class 會被 _featured_oob.html 在執行期 OOB 切換 —— 抓死的數字會讓
+  // threshold 整個偏移（磁吸區邊界算錯 → 自由區被誤攔 / listener 掛卸失準）。
+  function snapCount() {
+    // :scope > 限定直接子節點 — 這個函式在 scroll 熱路徑上被呼叫（syncWheelBinding），
+    // 不加的話 querySelectorAll 會走訪整個 #snap-container 子樹（所有卡片）。
+    return container.querySelectorAll(':scope > .snap-page:not(.projects-section):not(.featured-hidden)').length;
+  }
   let currentPage = 0;
   let isAnimating = false;
 
-  // Read --zoom from CSS so snap math matches the compensated snap-page height
+  // Read --zoom from CSS so snap math matches the compensated snap-page height.
+  // 快取起來：--zoom 是靜態 token，這個函式會在每次 scroll 事件的熱路徑上被呼叫
+  //（syncWheelBinding → pageH），不能每次都跑 getComputedStyle。resize 時重算。
+  let _zoomCache = 0;
   function zoomFactor() {
+    if (_zoomCache > 0) return _zoomCache;
     const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom'));
-    return (v && v > 0) ? v : 1;
+    _zoomCache = (v && v > 0) ? v : 1;
+    return _zoomCache;
   }
+  window.addEventListener('resize', () => { _zoomCache = 0; });
   function pageH() { return window.innerHeight / zoomFactor(); }
-  function maxSnapPage() { return snapCount - 1; }
+  function maxSnapPage() { return snapCount() - 1; }
   function inSnapZone() { return currentPage <= maxSnapPage(); }
 
   function goToPage(idx) {
@@ -368,7 +379,7 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
   }
 
   // Wheel: intercept in snap zone, let through in free zone
-  container.addEventListener('wheel', (e) => {
+  const onWheel = (e) => {
     // Don't hijack browser zoom (Ctrl/Cmd + wheel) or pinch-zoom trackpad gestures
     if (e.ctrlKey || e.metaKey) return;
 
@@ -378,7 +389,7 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
     if (innerCanScroll(e.target, e.deltaY)) return;
 
     const st = container.scrollTop;
-    const threshold = snapCount * pageH();
+    const threshold = snapCount() * pageH();
 
     // Currently in snap zone
     if (st < threshold - 5) {
@@ -389,7 +400,7 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
           goToPage(currentPage + 1);
         } else {
           // Jump to projects (exit snap zone)
-          currentPage = snapCount;
+          currentPage = snapCount();
           isAnimating = true;
           container.scrollTo({ top: threshold, behavior: 'smooth' });
           setTimeout(() => { isAnimating = false; }, 500);
@@ -407,14 +418,42 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
       goToPage(currentPage);
     }
     // Otherwise: free scroll, don't intercept
-  }, { passive: false });
+  };
+
+  // 只在磁吸區（＋一小段緩衝）掛 non-passive wheel listener。
+  // 掛著的期間，瀏覽器每一格滾輪都得先等 JS 跑完才能捲動 —— 整個容器都會
+  // 失去合成器的平滑捲動快速路徑。之前這個 listener 常駐整頁，是「所有作品」
+  // 區滾起來不絲滑的主因。緩衝區要夠深：從自由區往上滾回磁吸區時，scroll 事件
+  // 會在進入緩衝區時先把 listener 掛回來，接手「吸回精選頁」的行為。
+  // 緩衝至少 400px、且不小於半個 snap page（大螢幕 / 低 zoom 時 400px 相對太薄）
+  function wheelRebindBuffer() { return Math.max(400, pageH() * 0.5); }
+  let wheelBound = false;
+  function syncWheelBinding() {
+    const shouldBind = container.scrollTop < snapCount() * pageH() + wheelRebindBuffer();
+    if (shouldBind && !wheelBound) {
+      container.addEventListener('wheel', onWheel, { passive: false });
+      wheelBound = true;
+    } else if (!shouldBind && wheelBound) {
+      container.removeEventListener('wheel', onWheel);
+      wheelBound = false;
+    }
+  }
+  syncWheelBinding();
 
   // Track scroll position for back-to-top + TOC highlight
-  const tocLinks = container.querySelectorAll('.toc-link');
-  const groups = container.querySelectorAll('.project-group[id]');
+  // TOC nav 與 project groups 會被 HTMX（含 OOB）整批換掉 —— 一開始抓死的
+  // NodeList 在換過之後全是 detached nodes，scroll-spy 會默默失效。
+  // 改成可刷新的引用，afterSettle 時重抓。
+  let tocLinks = container.querySelectorAll('.toc-link');
+  let groups = container.querySelectorAll('.project-group[id]');
+  document.body.addEventListener('htmx:afterSettle', () => {
+    tocLinks = container.querySelectorAll('.toc-link');
+    groups = container.querySelectorAll('.project-group[id]');
+  });
   let tocTicking = false;
 
   container.addEventListener('scroll', () => {
+    syncWheelBinding();
     if (btn) btn.classList.toggle('visible', container.scrollTop > 400);
 
     // TOC active state — pick the group whose top is closest to (but not below)
@@ -460,20 +499,21 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
   // Also highlight the clicked link IMMEDIATELY and lock out the scroll-driven
   // highlight for ~600ms so the smooth-scroll doesn't briefly flash the wrong item.
   let tocClickLock = false;
-  tocLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const target = container.querySelector(link.getAttribute('href'));
-      if (!target) return;
-      tocLinks.forEach(l => l.classList.remove('active'));
-      link.classList.add('active');
-      tocClickLock = true;
-      const cRect = container.getBoundingClientRect();
-      const tRect = target.getBoundingClientRect();
-      const top = container.scrollTop + (tRect.top - cRect.top) / zoomFactor() - 20;
-      container.scrollTo({ top, behavior: 'smooth' });
-      setTimeout(() => { tocClickLock = false; }, 600);
-    });
+  // 委派在 container 上 —— TOC nav 被 OOB 換掉後點擊仍有效（不用重綁）。
+  container.addEventListener('click', (e) => {
+    const link = e.target.closest('.toc-link');
+    if (!link) return;
+    e.preventDefault();
+    const target = container.querySelector(link.getAttribute('href'));
+    if (!target) return;
+    tocLinks.forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    tocClickLock = true;
+    const cRect = container.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    const top = container.scrollTop + (tRect.top - cRect.top) / zoomFactor() - 20;
+    container.scrollTo({ top, behavior: 'smooth' });
+    setTimeout(() => { tocClickLock = false; }, 600);
   });
 
   // Back to top
@@ -491,9 +531,9 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
   window.jumpToSearch = function() {
     const input = document.querySelector('.search-input');
     if (!input) return;
-    currentPage = snapCount;              // mark as exited snap zone so wheel handler doesn't drag back
+    currentPage = snapCount();            // mark as exited snap zone so wheel handler doesn't drag back
     isAnimating = true;
-    container.scrollTo({ top: snapCount * pageH(), behavior: 'smooth' });
+    container.scrollTo({ top: snapCount() * pageH(), behavior: 'smooth' });
     setTimeout(() => {
       isAnimating = false;
       input.focus({ preventScroll: true });  // don't let focus auto-scroll and undo our alignment
@@ -534,11 +574,10 @@ function getLang() {
 
 function applyLang(lang) {
   document.documentElement.setAttribute('data-lang', lang);
-  // Update search placeholder
-  const searchInput = document.querySelector('.search-input');
-  if (searchInput) {
-    searchInput.placeholder = lang === 'zh' ? '搜尋...' : 'Search...';
-  }
+  // Update search placeholders（主搜尋框 + TOC 側欄搜尋框）
+  document.querySelectorAll('.search-input, .toc-search-input').forEach(el => {
+    el.placeholder = lang === 'zh' ? '搜尋...' : 'Search...';
+  });
 }
 
 function toggleLang() {
@@ -804,9 +843,10 @@ function copyCmd(btn, cmd) {
 function openModal() {
   document.getElementById('modal-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
-  // Re-init icons + auto-focus first input (a11y: focus-management)
+  // Auto-focus first input (a11y: focus-management)。
+  // icon 重繪不在這裡做：htmx 路徑由 afterSettle 統一處理、預載快取路徑自己補，
+  // 這裡再掃一次全頁是重複工。
   setTimeout(() => {
-    lucide.createIcons();
     const first = document.querySelector('#modal-content input[autofocus], #modal-content input:first-of-type');
     if (first) first.focus();
   }, 100);
@@ -1934,3 +1974,82 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeFilterMore();
 });
+
+
+// ---------- TOC sidebar search — mirror of the main .search-input ----------
+// TOC 搜尋框自己不掛 name / hx-*（避免 hx-include=".search-input" 收到兩個 q），
+// 它只把值鏡射進主搜尋框、再觸發主搜尋框既有的 HTMX input trigger（含 300ms debounce）。
+(() => {
+  const tocInput = document.querySelector('.toc-search-input');
+  const mainInput = document.querySelector('.search-input');
+  if (!tocInput || !mainInput) return;
+  // 初始 placeholder 跟語系走（applyLang 之後的切換也會同步蓋掉）
+  tocInput.placeholder = getLang() === 'zh' ? '搜尋...' : 'Search...';
+
+  tocInput.addEventListener('input', () => {
+    mainInput.value = tocInput.value;
+    mainInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // 反向同步：在主搜尋框打字時，讓 TOC 框顯示一致（不觸發事件、不會迴圈）
+  mainInput.addEventListener('input', () => {
+    if (document.activeElement === tocInput) return;
+    tocInput.value = mainInput.value;
+  });
+})();
+
+
+// ---------- Card detail preload — hover 預載，點開卡片零往返 ----------
+// 每次點卡片原本都要跑一趟 Render + Supabase（幾百 ms 的「開卡片卡卡的」主因）。
+// 滑鼠在卡片上停留 ≥120ms 就先把 /detail 抓回來放記憶體；真的點下去時攔掉
+// HTMX 請求、直接塞快取內容。任何 #tool-grid swap（編輯/加星/刪除/篩選）都會
+// 清空快取，不會看到編輯前的舊資料。
+(() => {
+  const cache = new Map();          // toolId -> html（null = 抓取中）
+  let epoch = 0;                    // 快取世代 — 防「清空後、還在飛的舊 fetch 把舊資料種回來」
+  let hoverTimer = null;
+
+  document.body.addEventListener('mouseover', (e) => {
+    const card = e.target.closest('.project-card[data-tool-id]');
+    if (!card) return;
+    const id = card.dataset.toolId;
+    if (cache.has(id)) return;
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      if (cache.has(id)) return;
+      cache.set(id, null);          // in-flight 標記，防重複抓
+      const myEpoch = epoch;        // 這筆 fetch 屬於發出當下的世代
+      fetch(`/api/tool/${id}/detail`)
+        .then(r => (r.ok ? r.text() : Promise.reject()))
+        .then(html => { if (myEpoch === epoch) cache.set(id, html); })
+        .catch(() => { if (myEpoch === epoch) cache.delete(id); });
+    }, 120);
+  });
+
+  // 命中快取 → 取消 HTMX 請求、直接 swap。
+  // 註：此 listener 必須註冊在「modal loading placeholder」的 beforeRequest 之後
+  //（本檔案較前面那個），placeholder 先寫入、這裡再覆蓋成真內容。
+  document.body.addEventListener('htmx:beforeRequest', (e) => {
+    const tgt = e.detail && e.detail.target;
+    if (!tgt || tgt.id !== 'modal-content') return;
+    const path = (e.detail.requestConfig && e.detail.requestConfig.path) || '';
+    const m = path.match(/^\/api\/tool\/([^/]+)\/detail$/);
+    if (!m) return;
+    const html = cache.get(m[1]);
+    if (!html) return;              // 沒抓到（或還在抓）→ 走原本的 HTMX 請求
+    e.preventDefault();
+    tgt.innerHTML = html;
+    // 走捷徑不會觸發 htmx:afterSwap/afterSettle，該做的初始化自己補：
+    // (1) htmx 只會處理它自己 swap 進來的內容 —— 手動塞的 DOM 一定要 htmx.process()
+    //     否則 detail 裡的「編輯」鈕（hx-get）會完全沒反應且零錯誤訊息
+    if (window.htmx) htmx.process(tgt);
+    lucide.createIcons();
+    detailCarouselInit();
+  });
+
+  // 資料有變動的所有路徑都會重繪 #tool-grid → 以此作為快取失效訊號。
+  // epoch++ 讓還在飛的舊 fetch 作廢（resolve 回來發現世代不符就不落地）。
+  document.body.addEventListener('htmx:afterSwap', (e) => {
+    const tgt = e.detail && e.detail.target;
+    if (tgt && tgt.id === 'tool-grid') { epoch++; cache.clear(); }
+  });
+})();

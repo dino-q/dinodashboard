@@ -1,0 +1,11 @@
+<!-- TOC 分類清單。OOB 刷新時只換這個 nav（_toc_oob.html 設 toc_oob=true），
+     不能換整個 aside — aside 裡還有不隨 grid 重繪的 .toc-search 搜尋框。 -->
+<nav class="toc-nav" id="toc-nav"{% if toc_oob %} hx-swap-oob="outerHTML"{% endif %}>
+  {% for group in groups %}
+    <a href="#cat-{{ group.category.id }}" class="toc-link" data-cat="{{ group.category.id }}">
+      <i data-lucide="{{ group.category.icon }}" style="width:14px;height:14px"></i>
+      <span>{{ group.category.name_zh }}</span>
+      <span class="toc-count">{{ group.tools | length }}</span>
+    </a>
+  {% endfor %}
+</nav>

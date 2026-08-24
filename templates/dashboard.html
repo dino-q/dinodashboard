@@ -312,17 +312,13 @@
     </nav>
 
     <div class="projects-layout">
-      <!-- Sidebar TOC -->
+      <!-- Sidebar TOC（sticky）— 頂端帶一個與主搜尋框雙向同步的小搜尋框 -->
       <aside class="projects-toc" id="projects-toc">
-        <nav class="toc-nav">
-          {% for group in groups %}
-            <a href="#cat-{{ group.category.id }}" class="toc-link" data-cat="{{ group.category.id }}">
-              <i data-lucide="{{ group.category.icon }}" style="width:14px;height:14px"></i>
-              <span>{{ group.category.name_zh }}</span>
-              <span class="toc-count">{{ group.tools | length }}</span>
-            </a>
-          {% endfor %}
-        </nav>
+        <div class="toc-search">
+          <i data-lucide="search" class="toc-search-icon"></i>
+          <input type="search" class="toc-search-input" autocomplete="off" placeholder="搜尋...">
+        </div>
+        {% include "partials/_toc_nav.html" %}
       </aside>
 
       <!-- Grid -->
