@@ -2018,7 +2018,9 @@ document.addEventListener('keydown', (e) => {
       if (cache.has(id)) return;
       cache.set(id, null);          // in-flight 標記，防重複抓
       const myEpoch = epoch;        // 這筆 fetch 屬於發出當下的世代
-      fetch(`/api/tool/${id}/detail`)
+      // HX-Request header 必帶：PRIVATE_MODE 下 session 失效時 _deny 才會回 401
+      // 而不是 302 → fetch follow → 把 /login 整頁 HTML 當 detail 快取進 modal
+      fetch(`/api/tool/${id}/detail`, { headers: { 'HX-Request': 'true' } })
         .then(r => (r.ok ? r.text() : Promise.reject()))
         .then(html => { if (myEpoch === epoch) cache.set(id, html); })
         .catch(() => { if (myEpoch === epoch) cache.delete(id); });

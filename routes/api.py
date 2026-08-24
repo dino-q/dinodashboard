@@ -19,7 +19,7 @@ from data.tools import (
     load_quick_inputs, save_quick_input_settings, build_local_map,
 )
 from data.auto_tag import auto_tag_all
-from routes.auth import login_required, editor_required
+from routes.auth import login_required, editor_required, private_read_guard
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -82,6 +82,7 @@ def _grid_response(category=None, q=None, toast_msg=None, include_oob=True, stat
 # ------------------------------------------------------------------
 
 @bp.route("/tools")
+@private_read_guard
 def list_tools():
     category = request.args.get("category", "").strip() or None
     q = request.args.get("q", "").strip() or None
@@ -101,6 +102,7 @@ def list_tools():
 # ------------------------------------------------------------------
 
 @bp.route("/tool/<tool_id>/detail")
+@private_read_guard
 def detail(tool_id):
     tool = get_tool(tool_id)
     if not tool:
@@ -365,7 +367,9 @@ def _translate_zh_to_en(text: str) -> str:
     return ""
 
 
+# 只有編輯表單的 ⚡ 面板會用（presets 含本機指令/路徑），比照寫入端掛 editor
 @bp.route("/quick-inputs", methods=["GET"])
+@editor_required
 def quick_inputs_get():
     return jsonify({
         "env_types": load_env_types(),
@@ -389,7 +393,9 @@ def quick_inputs_save():
     })
 
 
+# 只有編輯表單的「智慧建議」鈕會用，匿名可打會被當免費翻譯 API 濫用
 @bp.route("/tool/suggest", methods=["POST"])
+@editor_required
 def suggest():
     name_zh = request.form.get("name_zh", "").strip()
     description = request.form.get("description", "").strip()

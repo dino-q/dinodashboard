@@ -4,7 +4,7 @@ Auth routes — login / logout / first-run setup / register / decorators / helpe
 import os
 from functools import wraps
 
-from flask import Blueprint, request, render_template, redirect, url_for, session, make_response
+from flask import Blueprint, request, render_template, redirect, url_for, session, make_response, g, has_request_context
 
 from data.auth import (
     has_any_user, has_admin, create_user, verify, get_user,
@@ -33,10 +33,21 @@ def is_registration_open() -> bool:
 
 # ---------- session / role helpers ----------
 def current_user() -> dict | None:
+    """Request 層記憶化：context_processor 每次 render 會經 is_logged_in /
+    is_admin / is_editor / is_viewer / current_user 呼叫這裡 5 次，之前每次都
+    真的打一次 users 表（一次 _grid_response render 4 個模板 ≈ 20 次查詢）。
+    同一個 request 內使用者不會變，查一次就夠。"""
     uname = session.get("username")
     if not uname:
         return None
-    return get_user(uname)
+    if has_request_context():
+        cached = getattr(g, "_current_user_memo", None)
+        if cached is not None and cached[0] == uname:
+            return cached[1]
+    user = get_user(uname)
+    if has_request_context():
+        g._current_user_memo = (uname, user)
+    return user
 
 
 def is_logged_in() -> bool:
@@ -77,6 +88,18 @@ def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
         if not is_logged_in():
+            return _deny(url_for("auth.login_page"), 401)
+        return f(*args, **kwargs)
+    return wrap
+
+
+def private_read_guard(f):
+    """讀取端點的守衛：PRIVATE_MODE 開啟時要求登入（與首頁的門檻一致），
+    關閉時維持公開（作品集模式）。缺了這層的話，知道網址的人可以繞過
+    首頁的 redirect 直接抓 /api/tools、/api/tool/<id>/detail 的資料。"""
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if is_private_mode() and not is_logged_in():
             return _deny(url_for("auth.login_page"), 401)
         return f(*args, **kwargs)
     return wrap
