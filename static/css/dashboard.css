@@ -23,6 +23,9 @@
   --success-bg:     rgba(52, 211, 153, 0.12);
   --warning:        #FBBF24;
   --warning-bg:     rgba(251, 191, 36, 0.12);
+  /* 常用工具卡片標題專用 — 比 --warning 亮一階，標題視覺重量比徽章/圖示輕。
+     深色：amber-300 #FCD34D，對 --surface(#18181B) 對比度 12.29:1（--warning 本身是 10.61:1，已很寬裕，再亮一階仍遠高於 4.5:1）。 */
+  --warning-title:  #FCD34D;
   --danger:         #F87171;
   --danger-bg:      rgba(248, 113, 113, 0.12);
   --code-bg:        #0C0C0E;
@@ -43,6 +46,7 @@
   --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
 
   --container:  1200px;
+  --server-batch-bar-h: 0px; /* 由 JS 量測批次列實際高度後寫入，供 .server-view 的底部留白計算用 */
 
   /* Gradient for hero text */
   --gradient-brand: linear-gradient(135deg, #818CF8 0%, #38BDF8 50%, #A78BFA 100%);
@@ -67,6 +71,20 @@
   --primary:        #6366F1;
   --primary-hover:  #4F46E5;
   --primary-bg:     rgba(99,102,241,.06);
+
+  /* 語意色（淺色版）— 深色主題的亮色系（#FBBF24 等）直接放白底上對比度不足，
+     這裡換成同色相家族的深階（Tailwind 700/800），實測對比度皆算過，見各行註解。
+     語意不變：黃=警告/常用/待處理、綠=成功、紅=危險、藍=資訊。 */
+  --accent:         #0369A1;  /* sky-700，對白底 5.93:1 */
+  --accent-2:       #6D28D9;  /* violet-700，對白底 7.10:1（目前 CSS 未被引用，補值供未來擴充一致） */
+  --success:        #047857;  /* emerald-700，對白底 5.48:1 */
+  --success-bg:     rgba(16, 185, 129, 0.12);
+  --warning:        #92400E;  /* amber-800，對白底 7.09:1 — 徽章/圖示用，字級多在 11-12px，要最大可讀性 */
+  --warning-bg:     rgba(217, 119, 6, 0.12);
+  --warning-title:  #B45309;  /* amber-700，對白底 5.02:1 — 常用工具卡片標題專用，比徽章亮一階但仍達 AA */
+  --danger:         #B91C1C;  /* red-700，對白底 6.47:1 */
+  --danger-bg:      rgba(239, 68, 68, 0.12);
+
   --code-bg:        #F4F4F5;
   --code-text:      #18181B;
   --code-prompt:    #059669;
@@ -1739,6 +1757,11 @@ html { scroll-behavior: smooth; }
   line-height: 1.3;
 }
 
+/* 常用工具（已加星）：標題用金色系但走獨立 token --warning-title，
+   跟星星圖示/狀態徽章的 --warning 脫鉤 —— 整行標題的視覺重量要比小圖示輕，
+   同飽和度套在一整行字上會太重；改這個不會牽動星星本體或 badge。（Dino 2026-09-16 / Tor 2026-09-16 調整） */
+.project-card:has(.star-btn.starred) .card-name { color: var(--warning-title); }
+
 .card-name-zh {
   font-size: 13px;
   color: var(--text-secondary);
@@ -2859,4 +2882,998 @@ button.detail-link-item.copied > svg { color: var(--success); }
 
   .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
   .cmd-field-row { grid-template-columns: 18px 20px 1fr 1fr; }
+}
+
+/* =====================================================
+   SERVER VIEW — 伺服器總管設定（Server_Launcher）
+   (toggled via .show-server on #projects)
+   沿用 LOCAL VIEW 的切換模式與 design tokens。
+   ===================================================== */
+.server-view { display: none; }
+.projects-section.show-server .filter-bar,
+.projects-section.show-server .projects-layout,
+.projects-section.show-server > .section-inner > .section-title { display: none; }
+.projects-section.show-server .server-view { display: block; padding-bottom: 48px; }
+
+/* --- 頂部：伺服器總管入口（顯眼處，一鍵複製路徑） --- */
+.server-launch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+.server-launch-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--primary);
+}
+.server-launch-info > div { min-width: 0; }
+.server-launch-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.server-launch-path {
+  display: block;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.server-launch-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.server-launch-copy:hover { border-color: var(--primary); background: var(--surface-hover); }
+.server-launch-copy.copied { color: var(--success); border-color: var(--success); }
+.server-launch-copy:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* --- 還沒建表的提示 --- */
+.server-setup-notice {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning, #F59E0B) 45%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning, #F59E0B) 8%, var(--surface));
+  color: var(--warning, #F59E0B);
+}
+.server-setup-notice strong { display: block; font-size: 14px; color: var(--text); margin-bottom: 4px; }
+.server-setup-notice p { margin: 0 0 4px; font-size: 13px; color: var(--text-muted); }
+.server-setup-notice code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text);
+}
+.server-setup-hint { font-size: 12px; color: var(--text-muted); }
+
+.server-view-hint {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  margin: 0 0 16px;
+  max-width: 900px;
+}
+/* 2026-09-15 Dino 回饋「都用灰色就好，不要有灰有白」：拿掉粗體字原本疊加的
+   --text 亮色，整段統一用 --text-muted，強調完全交給字重（700）本身，
+   不再疊第二層顏色訊號。 */
+.server-view-hint b { font-weight: 700; }
+/* 「按封存」是同一個動作，不能被行寬拆成兩行（見 _server_list.html 的斷行說明）。 */
+.server-view-hint .keep-together { white-space: nowrap; }
+
+/* --- 表格 --- */
+.server-table { display: flex; flex-direction: column; gap: 6px; }
+
+.server-row {
+  display: grid;
+  grid-template-columns: 52px 52px minmax(160px, 1.1fr) 78px minmax(0, 1.6fr) 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  transition: border-color .15s, background .15s, opacity .15s;
+}
+.server-row:not(.server-row-head):hover {
+  border-color: var(--card-accent, var(--primary));
+  background: var(--surface-hover);
+}
+/* 「顯示」「預設」表頭帶共同說明（title），游標換成問號提示可以 hover 看 */
+.server-row-head .has-help { cursor: help; }
+
+.server-row-head {
+  border-color: transparent;
+  background: transparent;
+  padding-top: 0;
+  padding-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* 關掉「顯示」的列：要看得出被關掉，但文字仍必須讀得清楚。
+   ⚠️ 不可以用 opacity 蓋整列——opacity 會把文字色和列背景一起拉向頁面底色，
+   壓縮兩者差距。實測 opacity:.45 在 light mode 只剩 2.7:1，低於 WCAG AA 的 4.5:1。
+   改成：虛線框＋透明底表示「關閉」，文字改用本來就達標的 --text-muted。 */
+.server-row.is-hidden-row {
+  border-style: dashed;
+  background: transparent;
+}
+.server-row.is-hidden-row:hover { background: var(--surface-hover); }
+.server-row.is-hidden-row .server-name-input,
+.server-row.is-hidden-row .server-col-name { color: var(--text-muted); }
+.server-row.is-hidden-row .server-port-input {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
+/* 顯示開關 */
+.server-switch {
+  position: relative;
+  display: block;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-hover);
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+.server-switch.on { background: var(--primary); border-color: var(--primary); }
+.server-switch.is-readonly { cursor: default; }
+.server-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform .18s, background .18s;
+}
+.server-switch.on .server-switch-knob { transform: translateX(16px); background: #fff; }
+.server-switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* 預設打勾 */
+.server-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  color: #fff;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.server-check.on { background: var(--primary); border-color: var(--primary); }
+.server-check.is-readonly { cursor: default; }
+.server-check:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* 名稱（可直接編輯） */
+.server-col-name { min-width: 0; }
+.server-name-form { margin: 0; }
+.server-name-input {
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  transition: border-color .15s, background .15s;
+}
+.server-name-input:hover { border-color: var(--border); }
+.server-name-input:focus { border-color: var(--primary); background: var(--surface); outline: none; }
+.server-src-tool {
+  display: block;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* port */
+.server-port-form { margin: 0; }
+.server-port-input {
+  width: 100%;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--card-accent, var(--primary));
+  background: color-mix(in srgb, var(--card-accent, var(--primary)) 12%, transparent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 2px;
+  transition: border-color .15s;
+}
+.server-port-input:hover { border-color: var(--border); }
+.server-port-input:focus { border-color: var(--primary); outline: none; }
+.server-port-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
+.server-col-path {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+/* 右側動作 */
+.server-col-act { display: flex; gap: 4px; justify-content: flex-end; }
+.server-copy-btn,
+.server-archive-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.server-copy-btn:hover,
+.server-archive-btn:hover { color: var(--text); border-color: var(--primary); background: var(--surface-hover); }
+.server-copy-btn.copied { color: var(--success); border-color: var(--success); }
+.server-copy-btn:focus-visible,
+.server-archive-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* --- 封存區 --- */
+.server-archive-box {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text-muted) 4%, transparent);
+}
+.server-archive-box > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.server-archive-box > summary::-webkit-details-marker { display: none; }
+.server-archive-box > summary:hover { color: var(--text); }
+.server-archive-box > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.server-archive-box[open] > summary { border-bottom: 1px solid var(--border); }
+.server-table-archived { padding: 10px 12px; gap: 4px; }
+
+.server-row.server-row-archived {
+  grid-template-columns: minmax(150px, 1fr) minmax(0, 1.6fr) 130px;
+  opacity: .7;
+}
+.server-row-archived:hover { opacity: 1; }
+.server-unarchive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.server-unarchive-btn:hover { color: var(--text); border-color: var(--primary); background: var(--surface-hover); }
+.server-unarchive-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* --- 窄螢幕：路徑欄先收掉，開關與名稱優先 --- */
+@media (max-width: 860px) {
+  .server-row { grid-template-columns: 46px 46px minmax(120px, 1fr) 68px 64px; gap: 10px; }
+  .server-col-path { display: none; }
+  .server-row.server-row-archived { grid-template-columns: minmax(120px, 1fr) 118px; }
+  .server-launch-bar { flex-direction: column; align-items: stretch; }
+  .server-launch-copy { justify-content: center; }
+}
+
+/* --- 整列可點開卡片（行為對齊「本地」分頁） --- */
+.server-row.is-clickable { cursor: pointer; }
+.server-open-icon {
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity .15s, color .15s;
+  align-self: center;
+  margin-right: 2px;
+}
+.server-row.is-clickable:hover .server-open-icon {
+  opacity: 1;
+  color: var(--card-accent, var(--primary));
+}
+
+/* --- 手動新增的項目標記 --- */
+.server-manual-tag {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+/* --- 手動新增表單 --- */
+.server-add-form {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text-muted) 4%, transparent);
+}
+.server-add-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.server-add-head i { color: var(--primary); }
+.server-add-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px 80px 80px;
+  gap: 8px;
+}
+.server-add-form input {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  transition: border-color .15s;
+  min-width: 0;
+}
+.server-add-path { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
+.server-add-port { text-align: center; }
+.server-add-form input:focus { border-color: var(--primary); outline: none; }
+.server-add-form input::placeholder { color: var(--text-muted); }
+.server-add-btn {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: filter .15s;
+}
+.server-add-btn:hover { filter: brightness(1.1); }
+.server-add-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.server-add-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.server-add-hint code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text);
+}
+
+@media (max-width: 860px) {
+  .server-add-fields { grid-template-columns: 1fr 1fr; }
+  .server-add-path { grid-column: 1 / -1; }
+}
+
+/* --- 搜尋 ＋ 分類篩選：同一排，視覺語彙比照卡片分頁的 .filter-bar ---
+   順序：全部 → 分類捲動槽（吸收多餘空間）→ 溢出「⋯」→ 搜尋框（靠右，固定寬度）。
+   token 全部沿用卡片分頁 .filter-pill / .filter-pills-scroll / .filter-pills-more-*，
+   不另外發明顏色或間距，只是換一個不跟卡片分頁共用 DOM/JS 狀態的獨立命名空間。 */
+.server-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 20px;
+  flex-wrap: nowrap;
+}
+.server-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.server-filter-pill:hover { color: var(--text); border-color: var(--text-muted); }
+.server-filter-pill.active {
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--primary);
+}
+.server-filter-pill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.server-filter-count {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  color: inherit;
+}
+.server-filter-pill.active .server-filter-count {
+  background: color-mix(in srgb, var(--primary) 24%, transparent);
+  color: var(--primary);
+}
+
+/* 分類 pill 的橫向捲動槽：分類一多就捲動，不擠壓搜尋框；卷軸本身藏起來，
+   滑鼠 / 觸控 / shift+滾輪都能捲。捲不下的再靠下面的「⋯」選單挑。 */
+.server-filter-pills-scroll {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  padding: 0 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.server-filter-pills-scroll::-webkit-scrollbar { display: none; }
+
+/* 溢出指示 + 選單 — 只有真的捲不下時才由 JS 顯示（量實際寬度，不是憑分類數量猜） */
+.server-filter-pills-more-wrap { position: relative; flex-shrink: 0; }
+.server-filter-pills-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.server-filter-pills-more-btn:hover { color: var(--primary); background: var(--surface-hover); }
+.server-filter-pills-more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.server-filter-pills-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.server-filter-pills-more-menu[hidden] { display: none; }
+.server-filter-pills-more-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.server-filter-pills-more-item:hover { background: var(--surface-hover); color: var(--text); }
+.server-filter-pills-more-item.active {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+}
+
+/* --- 分類區塊（可收折） --- */
+.server-group { margin-bottom: 14px; }
+.server-group[hidden] { display: none; }
+.server-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.server-group > summary::-webkit-details-marker { display: none; }
+.server-group > summary:hover { color: var(--primary); }
+.server-group > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.server-group > summary i { color: var(--text-muted); }
+.server-group > summary:hover i { color: var(--primary); }
+.server-group-caret { transition: transform .18s; }
+.server-group[open] > summary .server-group-caret { transform: rotate(90deg); }
+.server-group-name { flex: 1; }
+.server-group-count {
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+}
+
+/* --- 搜尋框：這一排最右側，固定寬度、不被分類 pill 擠壓（比照卡片分頁 .search-box） --- */
+.server-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 240px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color .15s, box-shadow .15s, width .25s;
+}
+.server-search:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+  width: 300px;
+}
+.server-search > i { color: var(--text-muted); flex-shrink: 0; }
+.server-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 0;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.server-search-input::placeholder { color: var(--text-muted); }
+.server-search-input::-webkit-search-cancel-button { display: none; }
+.server-search-clear {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.server-search.has-query .server-search-clear { display: inline-flex; }
+.server-search-clear:hover { color: var(--text); background: var(--surface-hover); }
+.server-search-clear:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.server-search-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 搜尋時整組都沒命中 → 收起來，不要留一排空標題 */
+.server-group[data-search-empty="1"] { display: none; }
+.server-row[hidden] { display: none; }
+
+/* --- 本機 / 線上網址圖示 --- */
+.server-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.server-link-btn:hover {
+  color: var(--text);
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+.server-link-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* 卡片沒填這個網址：留佔位讓欄位不跳動，但明顯是停用狀態 */
+.server-link-btn.is-empty {
+  opacity: .28;
+  border-style: dashed;
+  pointer-events: none;
+}
+
+/* --- 「預設」勾選框：沒勾也要看得出是個可以按的框，但不要搶戲 --- */
+.server-check {
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 65%, transparent);
+  background: transparent;
+}
+.server-check:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.server-check.on {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.server-check.on:hover { filter: brightness(1.08); }
+.server-check.is-readonly:hover { border-color: color-mix(in srgb, var(--text-muted) 65%, transparent); background: transparent; }
+
+/* --- 動作欄變寬：眼睛＋複製＋本機＋線上＋封存 共 5 個 --- */
+.server-row {
+  grid-template-columns: 52px 52px minmax(150px, 1.05fr) 74px minmax(0, 1.35fr) 168px;
+}
+.server-col-act { gap: 5px; }
+
+@media (max-width: 1100px) {
+  .server-row { grid-template-columns: 52px 52px minmax(140px, 1fr) 70px 168px; }
+  .server-row.server-row-archived { grid-template-columns: minmax(150px, 1fr) 130px; }
+  .server-col-path { display: none; }
+}
+@media (max-width: 860px) {
+  .server-row { grid-template-columns: 46px 46px minmax(110px, 1fr) 64px 110px; gap: 8px; }
+  .server-col-path { display: none; }
+  /* 窄螢幕先收掉兩個網址圖示，保留複製與封存 */
+  .server-link-btn { display: none; }
+
+  /* 搜尋 ＋ 分類篩選列：跟卡片分頁窄螢幕邏輯一致（見 .filter-bar 768px 覆寫）——
+     分類 pill 收起來（用下面 <details> 分組本身瀏覽），搜尋框改滿版、換到第一排。 */
+  .server-filter-bar { flex-wrap: wrap; }
+  .server-filter-bar .server-filter-pill,
+  .server-filter-bar .server-filter-pills-scroll,
+  .server-filter-bar .server-filter-pills-more-wrap { display: none; }
+  .server-filter-bar > .server-search { width: 100%; order: -1; }
+  .server-search:focus-within { width: 100%; }
+}
+
+/* =====================================================================
+   伺服器分頁 — 拖曳掃過多選 ＋ 批次調整（Dino 2026-09-15，同日追加修訂）
+   全部沿用既有 design tokens（--primary / --border / --surface / --radius-*），
+   不另外發明顏色。新增規則一律用「加類別」的方式疊在既有選擇器之上，
+   不改動 .server-row.server-row-archived 的欄寬與 .server-filter-bar 排列。
+
+   ⚠️ 第一輪：不用勾選框，改「整列換底色」；主要操作是按住滑鼠左鍵拖過去掃過多列。
+   ⚠️ 第二輪退件重做：
+     1) 選取視覺退回「邊框變色＋淡底＋左側色條」三件套 —— 這正是 AI 生成 UI 最典型的
+        樣板長相。改成只用一個訊號：整列底色本身的明度/彩度位移，不疊加邊框或色條。
+     2) 空白處（列與列的間隙、分類群組之間的間隙）也要能起拖，不是只有壓在列上才行。
+     3) 已選取的列要能再點一次取消；Shift+點擊只切換那一列、不影響其他已選的列。
+   ⚠️ 第三輪追加（同日）：批次操作列從「插在文件流裡」改成「固定在畫面底部，
+     捲動時一直看得見」——這不是走回「浮層蓋內容」的老路，界線是：固定可以，
+     遮擋不行。做法見下方 .server-batch-bar 與 body.has-server-batch-bar 兩段。
+   ===================================================================== */
+
+/* 可被選取的列：滑鼠移上去游標換成十字，暗示「這裡可以拖曳選取」
+   （is-clickable 的列本來就是 pointer，這裡疊加不衝突：可點開詳情、也可拖曳選取）。 */
+.server-row[tabindex] { cursor: cell; }
+.server-row[tabindex].is-clickable { cursor: pointer; }
+
+/* 鍵盤走到列上：整列給焦點框（inset，避免跟相鄰列的邊框打架） */
+.server-row[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* 被選取的列：只用一個訊號 —— 整列底色本身換成 primary 混色（不是中性灰的 hover 色）。
+   刻意不做的事（克制，見設計筆記）：
+     - 不疊加對比色邊框（未選取的列本來就有 --border 邊框，選取不動它）
+     - 不加左側色條 / box-shadow 裝飾
+     - 不讓其他未選取的列跟著變暗退場（會跟 is-hidden-row / server-row-archived
+       兩種本來就有的「變淡」語彙疊在一起，同一頁出現三種淡化語彙反而更亂）
+   跟既有三種列狀態不會混淆：
+     - hover 是中性灰（--surface-hover），選取是有彩度的 primary 底色，色相不同一眼分得出來
+     - is-hidden-row 是虛線框＋透明底，選取只換底色不動 border-style，兩者疊加時
+       虛線描邊還在、只是底色蓋上選取色 —— 看得出「這列被隱藏但也被選到」
+     - server-row-archived 只吃 opacity 稀釋，跟選取的色相變化是兩個獨立維度，疊加不衝突
+   深色模式下 primary（#818CF8）比 surface（#18181B）亮很多，混色同時墊高了亮度，
+   不是只換色相，色盲/低視力使用者也能靠亮度差異分辨；每一列另有 aria-selected，
+   不依賴任何視覺訊號。
+
+   2026-09-15 第四輪（Dino 實測回饋「選取後底色不夠顯眼」）：16%/22% 在深色清單裡太貼近
+   原本的 hover 灰，一眼掃過去不夠跳。混色比例拉到 32%/40%（仍是同一個訊號，只是強度
+   加倍，不新增任何邊框/色條）。實測 color-mix 換算後的等效背景：
+     深色模式 32% ≈ rgb(58,61,98)、40% ≈ rgb(66,70,115)（相對原本 41,43,62／53,56,89，
+     亮度與彩度都明顯拉開，跟 --surface-hover 的中性灰 #27272A 不會混淆）
+     淺色模式 32% ≈ rgb(205,206,251)，跟白色 surface / #F4F4F5 的 hover 灰一樣分得清楚，
+     且是明顯的薰衣草藍紫調，不是灰階，色相差異本身就是最強的辨識訊號。 */
+.server-row.is-selected {
+  background: color-mix(in srgb, var(--primary) 32%, var(--surface));
+}
+.server-row.is-selected:hover {
+  background: color-mix(in srgb, var(--primary) 40%, var(--surface));
+}
+
+/* 疊加狀態 1：已隱藏 ＋ 選取。背景本身因為 CSS 特異度相同、後宣告的 .is-selected
+   規則勝出，數值跟「一般列選取」完全一樣——但視覺上仍嫌不夠跳,因為這列還背著
+   虛線框＋text-muted 的「已隱藏」語彙一起看,兩者疊在一起容易讓眼睛判定「這行還是暗的」。
+   算過 WCAG 對比：is-hidden-row 原本用的 --text-muted 疊在 32% 選取底色上，
+   深色模式只剩 ~2.3:1、淺色模式更低，低於 AA 的 4.5:1 ——不是可以放著不管的問題。
+   做法：選取當下把這列的名稱文字暫時换回最亮的 --text（跟一般列選取時的文字色一致），
+   不是新增訊號，是「選取狀態本來就該讓文字維持可讀」的必要修正；虛線框保留，
+   「這列被隱藏」的語彙沒有消失，只是文字重新變得看得清楚。 */
+.server-row.is-hidden-row.is-selected .server-name-input,
+.server-row.is-hidden-row.is-selected .server-col-name,
+.server-row.is-hidden-row.is-selected .server-port-input {
+  color: var(--text);
+}
+
+/* 疊加狀態 2：封存 ＋ 選取。server-row-archived 用 opacity:.7 稀釋整列（含背景色），
+   選取的 32% 混色套上去會被那層 opacity 再打七折，跳不出來。這裡沿用「已經有交
+   互焦點就不淡化」的既有規則——:hover 早就是 opacity:1 了，選取（更明確的互動結果）
+   比 hover 更該擁有同樣的待遇，不是另外發明一個新數值。 */
+.server-row.server-row-archived.is-selected { opacity: 1; }
+
+/* --- 批次操作列：固定貼在視窗底部，捲動時一直看得見（2026-09-15 第三輪改版）。
+   Dino 的既有規則是「討厭浮層蓋住內容，不是討厭固定本身」，所以界線抓在：
+   固定可以，但出現時一定要讓內容自己讓出等高的空間，不能整條疊在最後一列上面。
+   實作：JS 量出這條列實際渲染高度寫進 --server-batch-bar-h，body 多一個
+   has-server-batch-bar class 時，#server-view 用 inline style 把 padding-bottom
+   加大同樣的高度（見 dashboard.js updateServerBatchBarSpacing()）——捲到最底時，
+   批次列底下對到的是這段「特地留出來的空白」，不是任何一列。 --- */
+.server-batch-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 95; /* 蓋過 back-to-top(90)，但在 toast(200) 與 modal(100/300) 之下 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: calc(100% - 40px);
+  max-width: var(--container);
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  box-shadow: var(--shadow-lg); /* 從文件流浮出視窗底部，需要有厚度才不會看起來貼在內容上 */
+}
+.server-batch-bar[hidden] { display: none; }
+
+/* 批次列出現時，同步把「回到頂端」的圓形按鈕收起來：兩者都在畫面右下／置中偏下，
+   窄螢幕時批次列會變滿版直式排列，跟 back-to-top 的位置會疊到一起。
+   批次列本身已經有一顆「取消選取」按鈕，回到頂端這時候不是非用不可的功能，
+   暫時讓路給批次列，選取一結束就自動還原。 */
+body.has-server-batch-bar .back-to-top.visible {
+  opacity: 0;
+  pointer-events: none;
+}
+.server-batch-info { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.server-batch-count { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.server-batch-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.server-batch-clear-btn:hover { color: var(--text); border-color: var(--primary); background: var(--surface-hover); }
+.server-batch-clear-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.server-batch-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.server-batch-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+.server-batch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.server-batch-btn:hover { color: var(--text); border-color: var(--primary); background: var(--surface-hover); }
+.server-batch-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .server-batch-bar {
+    flex-direction: column;
+    align-items: stretch;
+    width: calc(100% - 24px);
+    bottom: 12px;
+  }
+  .server-batch-info { justify-content: space-between; }
+  .server-batch-actions { justify-content: flex-start; }
+}
+
+/* --- Shift 多選模式（Dino 2026-09-15 第四輪追加）：按住 Shift 想連續加選，
+   很容易點到「改名稱」輸入框變成編輯文字，很容易誤觸。做法：按住 Shift 期間，
+   清單裡所有「會吃掉點擊」的互動元件（開關、預設勾、改名稱/port 輸入框、
+   複製/連結/封存按鈕）暫時 pointer-events:none，點下去的座標落空之後，
+   瀏覽器會把這次點擊算在底下的列本身，直接走既有的「Shift+點擊只切換這一列」
+   規則（四手勢對照表沒有變,只是確保點擊真的能命中列，不會被輸入框攔截）。
+
+   視覺提示只用一個訊號：游標。因為互動元件被設成 pointer-events:none，
+   滑鼠移到它們上面時，瀏覽器會把游標判定「穿透」給底下真正接收事件的列，
+   看到的游標就是列本身的游標——這不是額外疊加的裝飾，是「游標誠實反映點下去
+   會發生在哪一層」的必然結果。列的游標從平常的 cell（可拖曳選取但可能開卡片/
+   輸入）換成 copy（作業系統慣例的「+」號、代表加入某個集合），跟前面「選取
+   底色」用的是完全不同的訊號管道（游標 vs 背景色），不會疊加成第二個視覺噪音。
+   放開 Shift 立刻復原：cursor 與 pointer-events 都是純 CSS 開關，不需要另外
+   還原任何 inline 樣式。 --- */
+body.server-multiselect-active .server-select-scope .server-row[tabindex] {
+  cursor: copy;
+}
+body.server-multiselect-active .server-select-scope .server-switch,
+body.server-multiselect-active .server-select-scope .server-check,
+body.server-multiselect-active .server-select-scope .server-name-input,
+body.server-multiselect-active .server-select-scope .server-port-form,
+body.server-multiselect-active .server-select-scope .server-copy-btn,
+body.server-multiselect-active .server-select-scope .server-link-btn,
+body.server-multiselect-active .server-select-scope .server-archive-btn,
+body.server-multiselect-active .server-select-scope .server-unarchive-btn {
+  pointer-events: none;
+}
+
+/* --- 可操作的 toast（封存連動詢問）：沿用既有 #toast-container / .toast，
+   只是多一種「有按鈕、不自動消失」的變體，見 dashboard.js showActionToast() --- */
+.toast.toast-action {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  max-width: 340px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+.toast-action-msg { font-size: 13px; line-height: 1.6; margin: 0; }
+.toast-action-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.toast-action-btn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.toast-action-btn-primary { background: var(--primary); color: #fff; }
+.toast-action-btn-primary:hover { background: var(--primary-hover); }
+.toast-action-btn-ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
+.toast-action-btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+.toast-action-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* --- 被自動略過的安裝腳本（程式藏的，要讓使用者看得到） --- */
+.server-skipped-box {
+  margin-top: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text-muted) 3%, transparent);
+}
+.server-skipped-box > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.server-skipped-box > summary::-webkit-details-marker { display: none; }
+.server-skipped-box > summary:hover { color: var(--text); }
+.server-skipped-box > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.server-skipped-box[open] > summary { border-bottom: 1px solid var(--border); }
+.server-skipped-hint {
+  margin: 10px 14px 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+.server-skipped-hint b { color: var(--text); }
+.server-skipped-list {
+  list-style: none;
+  margin: 8px 0 12px;
+  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.server-skipped-list li {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 110px minmax(0, 2fr);
+  gap: 10px;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 12px;
+}
+.server-skipped-name { color: var(--text); font-weight: 600; }
+.server-skipped-label { color: var(--text-muted); }
+.server-skipped-list code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+@media (max-width: 860px) {
+  .server-skipped-list li { grid-template-columns: 1fr; gap: 2px; }
+  .server-skipped-list code { display: none; }
 }

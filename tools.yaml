@@ -24,13 +24,13 @@ tools:
   status: active
   highlight: true
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code
   commands:
   - label: 啟動 Docker 環境
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\start-docker.bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\system\Docker_ClaudeCode\start-docker.bat
     env: bat
   - label: 啟動 n8n + ngrok
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\start-n8n.bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\n8n\start-n8n.bat
     env: local
   - label: 啟動 TG x Claude
     cmd: cd C:\Users\AG_Di\Desktop\; claude --channels plugin:telegram@claude-plugins-official
@@ -39,7 +39,7 @@ tools:
     cmd: claude --permission-mode auto
     env: local
   - label: CLI_Claude Code(Docker環境)
-    cmd: docker run -it --rm -v "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution:/app"
+    cmd: docker run -it --rm -v "C:\Users\AG_Di\Desktop\automation\Claude_code:/app"
       -v "C:\Users\AG_Di\AppData\Local\Temp\claude-screenshots:/tmp/claude-screenshots"
       -w /app my-claude bash -c "su - node -c 'cd /app && npx @anthropic-ai/claude-code
       --dangerously-skip-permissions'"
@@ -66,7 +66,7 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Game
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\side_project\Game
   commands:
   - label: Github_Repo
     cmd: https://github.com/dino-q/Cute-RPG
@@ -96,10 +96,10 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\DinoDashboard
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\side_project\DinoDashboard
   commands:
   - label: 啟動 dev server
-    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\DinoDashboard";
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\side_project\DinoDashboard";
       pip install -r requirements.txt; python app.py
     env: local
     pinned: true
@@ -132,19 +132,19 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_Popular_games
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\Web_Crawler\Search_Popular_games
   commands:
   - label: 啟動 bat
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_Popular_games\
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\Web_Crawler\Search_Popular_games\
     env: bat
     pinned: true
   - label: 爬取 + 生成儀表板
-    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_Popular_games";
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\Web_Crawler\Search_Popular_games";
       python -m game_scout.main    --now; python generate_dashboard.py; start output\dashboard.html
     env: local
     pinned: false
   - label: 生成結果
-    cmd: file:///C:/Users/AG_Di/Desktop/automation/Claude_code/automatic_evolution/Search_Popular_games/output/dashboard.html
+    cmd: file:///C:/Users/AG_Di/Desktop/automation/Claude_code/Web_Crawler/Search_Popular_games/output/dashboard.html
     env: local
     pinned: false
   url: ''
@@ -174,10 +174,10 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_AI_news
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\Web_Crawler\Search_AI_news
   commands:
   - label: 啟動 bat
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Search_AI_news\run_and_sync.bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\Web_Crawler\Search_AI_news\run_and_sync.bat
     env: bat
     pinned: true
   url: ''
@@ -205,7 +205,7 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\LINE_group_PyAutoGUI_NotebookLM
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\LINE\LINE_group_PyAutoGUI_NotebookLM
   commands:
   - label: 登入NotebookLM
     cmd: '& "C:\Users\AG_Di\AppData\Roaming\Python\Python314\Scripts\notebooklm.exe"
@@ -213,12 +213,12 @@ tools:
     env: local
     pinned: true
   - label: 執行 (上次→今天)
-    cmd: python "c:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\LINE_group_PyAutoGUI_NotebookLM\line_macro.py"
+    cmd: python "c:\Users\AG_Di\Desktop\automation\Claude_code\LINE\LINE_group_PyAutoGUI_NotebookLM\line_macro.py"
       all
     env: local
     pinned: true
   - label: 執行 NotebookLM
-    cmd: python “C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\LINE_group_PyAutoGUI_NotebookLM\line_macro.py"
+    cmd: python “C:\Users\AG_Di\Desktop\automation\Claude_code\LINE\LINE_group_PyAutoGUI_NotebookLM\line_macro.py"
       pipeline
     env: local
     pinned: true
@@ -276,7 +276,7 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\CLI_CopyPaste\md-table-to-notion
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\CLI\CLI_CopyPaste\md-table-to-notion
   commands:
   - label: Github_Repo
     cmd: https://github.com/dino-q/md-table-to-notion
@@ -305,10 +305,10 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\CLI_CopyPaste
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\CLI\CLI_CopyPaste
   commands:
   - label: 自動開啟
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\CLI_CopyPaste\簡易使用說明.txt
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\CLI\CLI_CopyPaste\簡易使用說明.txt
     env: local
   url: ''
   external_url: ''
@@ -335,10 +335,10 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Notion_project_v3
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\side_project\Dino_Notion_Project_V3
   commands:
   - label: 啟動 dev server
-    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Notion_project_v3";
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\side_project\Dino_Notion_Project_V3";
       pip install flask pyyaml markdown markupsafe requests; python app.py
     env: local
     pinned: true
@@ -375,10 +375,10 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\gofree_calculator
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\tools\gofree_calculator
   commands:
   - label: 啟動 dev server
-    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\gofree_calculator";
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\tools\gofree_calculator";
       npm run dev
     env: local
     pinned: true
@@ -407,10 +407,10 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\chrome_long_screenshot
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\tools\chrome_long_screenshot
   commands:
   - label: 自動開啟
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\chrome_long_screenshot\使用方法.txt
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\tools\chrome_long_screenshot\使用方法.txt
     env: local
     pinned: false
   url: ''
@@ -621,7 +621,7 @@ tools:
   status: wip
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution\Order_GAS
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife\Order_GAS
   commands: []
   url: ''
   external_url: ''
@@ -644,18 +644,18 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_performance
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife\1shop_performance
   commands:
   - label: Notion
     cmd: https://www.notion.so/1shop_performance-API-KEY-31e24286a1e8808a82faf60e91b24036?source=copy_link
     env: Notion
     pinned: false
   - label: 執行 抓業績&儀錶板
-    cmd: cmd /c "C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_performance\run.bat"
+    cmd: cmd /c "C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife\1shop_performance\run.bat"
     env: bat
     pinned: true
   - label: 執行 儀錶板
-    cmd: cmd /c "C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_performance\dashboard_unified.bat"
+    cmd: cmd /c "C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife\1shop_performance\dashboard_unified.bat"
     env: bat
     pinned: false
   url: ''
@@ -676,10 +676,10 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\How_To_Project
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\tools\How_To_Project
   commands:
   - label: 啟動 bat
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\How_To_Project\analyze.bat
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\tools\How_To_Project\analyze.bat
     env: bat
     pinned: false
   url: ''
@@ -700,15 +700,15 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_sales
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife\1shop_sales
   commands:
   - label: 啟動 CLI
-    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_sales"; pip install
+    cmd: cd "C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife\1shop_sales"; pip install
       openpyxl pandas requests; python 1shop_overseas_export.py
     env: local
     pinned: true
   - label: 比對結果
-    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\1shop_sales\compare
+    cmd: C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife\1shop_sales\compare
     env: local
     pinned: true
   url: ''
@@ -731,7 +731,7 @@ tools:
   status: active
   highlight: false
   screenshot: ''
-  path: C:\Users\AG_Di\Desktop\automation\Claude_code\LINE_chat_formatter\line_chat_formatter
+  path: C:\Users\AG_Di\Desktop\automation\Claude_code\LINE\LINE_chat_formatter\line_chat_formatter
   commands:
   - label: Github_Repo
     cmd: https://github.com/dino-q/line-chat-formatter

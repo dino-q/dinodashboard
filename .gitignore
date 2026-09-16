@@ -28,6 +28,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# 一次性的卡片匯入檔（scripts/add_tool_from_project.py 的輸入），不是專案的一部分。
+# 注意：data/ 本身是程式碼目錄（launcher.py、tools.py…），不能整包 ignore。
+data/card_*.json
+
 # === Runtime data (re-generated on startup / user-uploaded) ===
 # Keep .gitkeep so dir exists in repo
 static/screenshots/*

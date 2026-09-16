@@ -1,0 +1,430 @@
+{# 伺服器分頁 — Server_Launcher 伺服器總管的設定面板
+   清單來源：所有卡片裡 env='bat' 的啟動指令（動態生成）＋手動新增的
+   三個狀態：顯示 / 預設勾 / 封存，存在 launcher_entries 表
+   分組：照卡片自己的分類（categories 表），可篩選、可收折 #}
+
+{#- 一列的內容抽成 macro，讓分類區塊共用同一份標記，不重複寫兩份 -#}
+{% macro server_row(it, is_editor) -%}
+  <div class="server-row {% if not it.visible %}is-hidden-row{% endif %}{% if it.tool_id %} is-clickable{% endif %}"
+       role="row" style="--card-accent: {{ it.color }}"
+       data-search="{{ (it.label ~ ' ' ~ it.tool_name ~ ' ' ~ it.bat_path ~ ' ' ~ (it.port or '')) | lower }}"
+       {% if is_editor %}data-bat-key="{{ it.bat_key }}" tabindex="0" aria-selected="false"{% endif %}
+       {% if it.tool_id %}onclick="serverRowOpen(event, '{{ it.tool_id }}')"
+       title="點一下開啟「{{ it.tool_name }}」的卡片詳情"{% endif %}>
+
+    <span class="server-col-toggle" role="cell">
+      {% if is_editor %}
+        <button type="button"
+                class="server-switch {% if it.visible %}on{% endif %}"
+                role="switch" aria-checked="{{ 'true' if it.visible else 'false' }}"
+                aria-label="是否在總管顯示 {{ it.label }}"
+                hx-post="/api/server/{{ it.bat_key }}/toggle"
+                hx-target="#server-view" hx-swap="innerHTML"
+                title="{{ '目前會出現在總管清單，點一下隱藏' if it.visible else '目前不會出現在總管清單，點一下顯示' }}&#10;&#10;{{ col_help }}">
+          <span class="server-switch-knob"></span>
+        </button>
+      {% else %}
+        <span class="server-switch {% if it.visible %}on{% endif %} is-readonly" title="{{ col_help }}"><span class="server-switch-knob"></span></span>
+      {% endif %}
+    </span>
+
+    <span class="server-col-default" role="cell">
+      {% if is_editor %}
+        <button type="button"
+                class="server-check {% if it.default_on %}on{% endif %}"
+                role="checkbox" aria-checked="{{ 'true' if it.default_on else 'false' }}"
+                aria-label="是否預設勾選 {{ it.label }}"
+                hx-post="/api/server/{{ it.bat_key }}/default"
+                hx-target="#server-view" hx-swap="innerHTML"
+                title="{{ '總管打開時預設勾選' if it.default_on else '總管打開時不勾選' }}&#10;&#10;{{ col_help }}">
+          {% if it.default_on %}<i data-lucide="check" style="width:13px;height:13px"></i>{% endif %}
+        </button>
+      {% else %}
+        <span class="server-check {% if it.default_on %}on{% endif %} is-readonly" title="{{ col_help }}">
+          {% if it.default_on %}<i data-lucide="check" style="width:13px;height:13px"></i>{% endif %}
+        </span>
+      {% endif %}
+    </span>
+
+    <span class="server-col-name" role="cell">
+      {% if is_editor %}
+        {#- 改完點別的地方（blur）就自動存檔，不用一定要按 Enter——
+           Dino 已經因為「沒按 Enter 就以為存到」白改過一次。
+           hx-trigger 的 changed 修飾詞：內容沒變就不送出，避免每次點進點出都打一次 API。
+           按 Enter 就直接 blur 觸發同一個 hx-trigger，不用另外掛 keyup，避免同一次
+           按鍵在部分瀏覽器下 blur + keyup 兩邊都各自觸發一次、送出兩次請求。
+           不用 <form> 包，是為了讓 Enter 不會觸發瀏覽器原生表單送出（會整頁跳轉）；
+           htmx 會直接抓這個 input 自己的 name=label 送出，不需要 form 包著才能序列化。 -#}
+        <input type="text" name="label" value="{{ it.label }}"
+               class="server-name-input" autocomplete="off"
+               aria-label="{{ it.label }} 的分頁名稱"
+               hx-post="/api/server/{{ it.bat_key }}/label"
+               hx-trigger="blur changed"
+               hx-target="#server-view" hx-swap="innerHTML"
+               onkeydown="if(event.key==='Enter'){ event.preventDefault(); this.blur(); }"
+               title="這就是總管裡的分頁名稱。改完點別的地方或按 Enter 就會存檔；清空後存檔可恢復自動命名。">
+      {% else %}
+        {{ it.label }}
+      {% endif %}
+      <small class="server-src-tool">
+        {% if it.manual %}<span class="server-manual-tag">手動</span>{% endif %}{{ it.tool_name }}
+      </small>
+    </span>
+
+    <span class="server-col-port" role="cell">
+      {% if is_editor %}
+        <form hx-post="/api/server/{{ it.bat_key }}/port"
+              hx-target="#server-view" hx-swap="innerHTML" class="server-port-form">
+          <input type="text" inputmode="numeric" name="port"
+                 value="{{ it.port or '' }}" placeholder="—"
+                 class="server-port-input" autocomplete="off"
+                 aria-label="{{ it.label }} 的 port"
+                 title="填了才偵測得到「執行中」、才能重開。留空代表偵測不到。">
+        </form>
+      {% else %}
+        {{ it.port or '—' }}
+      {% endif %}
+    </span>
+
+    <span class="server-col-path" role="cell" title="{{ it.bat_path }}">{{ it.bat_path }}</span>
+
+    <span class="server-col-act" role="cell">
+      {% if it.tool_id %}
+        <i data-lucide="eye" class="server-open-icon" style="width:14px;height:14px"></i>
+      {% endif %}
+      <button type="button" class="server-copy-btn"
+              onclick='copyCmd(this, {{ it.bat_path | tojson }})'
+              title="複製這支 bat 的路徑" aria-label="複製 {{ it.label }} 的路徑">
+        <i data-lucide="copy" style="width:14px;height:14px"></i>
+      </button>
+      {# 本機網址（對應卡片的 Local）—— 沒填就顯示灰掉的佔位，欄寬才不會跳 #}
+      {% if it.url %}
+        <a class="server-link-btn" href="{{ it.url }}" target="_blank" rel="noopener"
+           onclick="event.stopPropagation()"
+           title="開啟本機網址 {{ it.url }}" aria-label="開啟 {{ it.label }} 的本機網址">
+          <i data-lucide="monitor" style="width:14px;height:14px"></i>
+        </a>
+      {% else %}
+        <span class="server-link-btn is-empty" title="這張卡片沒填本機網址" aria-hidden="true">
+          <i data-lucide="monitor" style="width:14px;height:14px"></i>
+        </span>
+      {% endif %}
+      {# 線上網址（對應卡片的 Web） #}
+      {% if it.external_url %}
+        <a class="server-link-btn" href="{{ it.external_url }}" target="_blank" rel="noopener"
+           onclick="event.stopPropagation()"
+           title="開啟線上網址 {{ it.external_url }}" aria-label="開啟 {{ it.label }} 的線上網址">
+          <i data-lucide="globe" style="width:14px;height:14px"></i>
+        </a>
+      {% else %}
+        <span class="server-link-btn is-empty" title="這張卡片沒填線上網址" aria-hidden="true">
+          <i data-lucide="globe" style="width:14px;height:14px"></i>
+        </span>
+      {% endif %}
+      {% if is_editor %}
+        {% if it.manual %}
+          <button type="button" class="server-archive-btn"
+                  hx-post="/api/server/{{ it.bat_key }}/delete"
+                  hx-confirm="確定要刪除手動新增的「{{ it.label }}」？"
+                  hx-target="#server-view" hx-swap="innerHTML"
+                  aria-label="刪除 {{ it.label }}"
+                  title="刪除這筆手動新增的項目">
+            <i data-lucide="trash-2" style="width:14px;height:14px"></i>
+          </button>
+        {% else %}
+          <button type="button" class="server-archive-btn"
+                  hx-post="/api/server/{{ it.bat_key }}/archive"
+                  hx-target="#server-view" hx-swap="innerHTML"
+                  aria-label="封存 {{ it.label }}"
+                  title="封存：從這份清單收起來，總管也不會看到">
+            <i data-lucide="archive" style="width:14px;height:14px"></i>
+          </button>
+        {% endif %}
+      {% endif %}
+    </span>
+  </div>
+{%- endmacro %}
+
+{#- 「顯示」與「預設」的共同說明：表頭與每一列的開關共用同一份文字，只改這裡 -#}
+{%- set col_help = '「顯示」打開後，會出現在伺服器總管的 CLI 選單（可勾選）
+勾選「預設」，則會設為常駐伺服器，預設勾選' -%}
+
+{% macro server_head() -%}
+  <div class="server-row server-row-head" role="row">
+    <span class="server-col-toggle has-help" role="columnheader" title="{{ col_help }}"><span class="zh">顯示</span><span class="en">Show</span></span>
+    <span class="server-col-default has-help" role="columnheader" title="{{ col_help }}"><span class="zh">預設</span><span class="en">Default</span></span>
+    <span class="server-col-name" role="columnheader"><span class="zh">名稱</span><span class="en">Name</span></span>
+    <span class="server-col-port" role="columnheader">Port</span>
+    <span class="server-col-path" role="columnheader"><span class="zh">來源 bat</span><span class="en">Source bat</span></span>
+    <span class="server-col-act" role="columnheader"></span>
+  </div>
+{%- endmacro %}
+
+
+<div class="server-launch-bar">
+  <div class="server-launch-info">
+    <i data-lucide="terminal" style="width:18px;height:18px"></i>
+    <div>
+      <span class="server-launch-title">
+        <span class="zh">開啟伺服器總管</span><span class="en">Open Server Launcher</span>
+      </span>
+      <code class="server-launch-path">{{ server.launcher_bat }}</code>
+    </div>
+  </div>
+  <button type="button" class="server-launch-copy"
+          onclick='copyCmd(this, {{ server.launcher_bat | tojson }})'
+          title="複製路徑" aria-label="複製伺服器總管路徑">
+    <i data-lucide="copy" style="width:15px;height:15px"></i>
+    <span class="zh">複製</span><span class="en">Copy</span>
+  </button>
+</div>
+
+{% if server.missing_table %}
+  <div class="server-setup-notice">
+    <i data-lucide="database" style="width:20px;height:20px"></i>
+    <div>
+      <strong><span class="zh">還沒建資料表</span><span class="en">Table not created yet</span></strong>
+      <p>
+        <span class="zh">把這份 SQL 貼到 Supabase 的 SQL Editor 執行一次即可：</span>
+        <span class="en">Run this SQL once in the Supabase SQL Editor:</span>
+      </p>
+      <code>supabase_db/launcher_entries.sql</code>
+      <p class="server-setup-hint">
+        <span class="zh">建表前這一頁的開關不會被記住。</span>
+        <span class="en">Toggles are not persisted until the table exists.</span>
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+{#- 這段說明 Dino 指定要在「顯示」那個分號後強制斷行成兩句（見設計筆記），
+   不是交給瀏覽器自動 reflow——所以用 <br> 而不是等寬度自然換行。
+   「按封存」用 .keep-together 包起來，語意上是一個動作，不能被行寬拆成兩行。 -#}
+<p class="server-view-hint">
+  <span class="zh">清單自動從各卡片的「bat」啟動指令生成，分類跟著卡片走。<b>顯示</b>＝要不要出現在本機總管；<br><b>預設</b>＝總管一打開就先勾起來（開機會自動開）；用不到的<span class="keep-together">按<b>封存</b></span>收起來。</span>
+  <span class="en">Built automatically from every card's “bat” command, grouped by the card's category. Show = appears in the local launcher; Default = pre-checked on open; Archive hides it.</span>
+</p>
+
+{% if server.active %}
+  {# 搜尋 ＋ 分類篩選：同一排，順序＝全部 → 分類捲動槽 → 溢出「⋯」→ 搜尋框（靠右）。
+     視覺語彙比照卡片分頁的 .filter-bar，但用獨立的 class / id 命名空間，
+     不跟卡片分頁共用 DOM 節點與 JS 狀態（兩個分頁的篩選是各自獨立的資料集）。 #}
+  <div class="server-filter-bar" role="group" aria-label="搜尋與分類篩選">
+    <button type="button" class="server-filter-pill active" data-cat="__all__"
+            onclick="setServerCategory(this, '__all__')">
+      <span class="zh">全部</span><span class="en">All</span>
+      <span class="server-filter-count">{{ server.active | length }}</span>
+    </button>
+
+    <div class="server-filter-pills-scroll">
+      {% for g in server.groups %}
+        <button type="button" class="server-filter-pill" data-cat="{{ g.id }}"
+                onclick="setServerCategory(this, '{{ g.id }}')">
+          <i data-lucide="{{ g.icon }}" style="width:13px;height:13px"></i>
+          {{ g.name }}
+          <span class="server-filter-count">{{ g.count }}</span>
+        </button>
+      {% endfor %}
+    </div>
+
+    {# 溢出選單：捲動槽真的塞不下時才由 JS 顯示，列出全部分類方便直接挑 #}
+    <div class="server-filter-pills-more-wrap" id="server-pills-more-wrap" hidden>
+      <button type="button" class="server-filter-pills-more-btn"
+              onclick="toggleServerFilterMore(event)"
+              title="全部分類" aria-label="所有分類">
+        <i data-lucide="more-horizontal" style="width:18px;height:18px"></i>
+      </button>
+      <div class="server-filter-pills-more-menu" id="server-pills-more-menu" hidden>
+        {% for g in server.groups %}
+          <button type="button" class="server-filter-pills-more-item" data-cat="{{ g.id }}"
+                  onclick="pickServerCategoryFromMore(this, '{{ g.id }}')">
+            <i data-lucide="{{ g.icon }}" style="width:14px;height:14px"></i>
+            {{ g.name }}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# 搜尋：純前端過濾，比對名稱、來源卡片、bat 路徑、port #}
+    <div class="server-search">
+      <i data-lucide="search" style="width:15px;height:15px"></i>
+      <input type="search" id="server-search-input" class="server-search-input"
+             placeholder="搜尋名稱、路徑、port…" autocomplete="off"
+             aria-label="搜尋伺服器清單"
+             oninput="filterServerRows(this.value)">
+      <button type="button" class="server-search-clear" onclick="clearServerSearch()"
+              title="清除搜尋" aria-label="清除搜尋">
+        <i data-lucide="x" style="width:14px;height:14px"></i>
+      </button>
+      <span class="server-search-count" id="server-search-count"></span>
+    </div>
+  </div>
+
+  {% if is_editor %}
+    {#- 批次操作列：勾了東西才出現(JS 用 hidden 屬性切換)。
+       2026-09-15 改版：固定貼在畫面底部、捲動時一直看得見(Dino 明確要求)。
+       這不是走回「浮層蓋內容」——固定可以、遮擋不行：出現時 JS 會把
+       #server-view 的 padding-bottom 加大到跟這條列一樣高(見 dashboard.js
+       updateServerBatchBarSpacing())，捲到最底時最後一列一樣完整看得見、點得到。 -#}
+    <div class="server-batch-bar" id="server-batch-bar" role="toolbar" aria-label="批次操作" hidden>
+      <div class="server-batch-info">
+        <button type="button" class="server-batch-clear-btn" id="server-batch-clear-btn"
+                onclick="serverSelectClearAll()" title="取消選取" aria-label="取消選取">
+          <i data-lucide="x" style="width:14px;height:14px"></i>
+        </button>
+        <span class="server-batch-count" id="server-batch-count" aria-live="polite">已選 0 項</span>
+      </div>
+      <div class="server-batch-actions">
+        <button type="button" class="server-batch-btn" onclick="serverBatchAction('show')">
+          <i data-lucide="eye" style="width:14px;height:14px"></i><span>顯示</span>
+        </button>
+        <button type="button" class="server-batch-btn" onclick="serverBatchAction('hide')">
+          <i data-lucide="eye-off" style="width:14px;height:14px"></i><span>隱藏</span>
+        </button>
+        <span class="server-batch-sep" aria-hidden="true"></span>
+        <button type="button" class="server-batch-btn" onclick="serverBatchAction('default_on')">
+          <i data-lucide="check-square" style="width:14px;height:14px"></i><span>設為預設</span>
+        </button>
+        <button type="button" class="server-batch-btn" onclick="serverBatchAction('default_off')">
+          <i data-lucide="square" style="width:14px;height:14px"></i><span>取消預設</span>
+        </button>
+        <span class="server-batch-sep" aria-hidden="true"></span>
+        <button type="button" class="server-batch-btn" onclick="serverBatchAction('archive')">
+          <i data-lucide="archive" style="width:14px;height:14px"></i><span>封存</span>
+        </button>
+        <button type="button" class="server-batch-btn" onclick="serverBatchAction('unarchive')">
+          <i data-lucide="archive-restore" style="width:14px;height:14px"></i><span>解除封存</span>
+        </button>
+      </div>
+    </div>
+  {% endif %}
+
+  {#- 拖曳掃過選取的範圍：涵蓋所有分類群組，可以跨分類一次掃到。
+     按住滑鼠左鍵拖過去，經過的列即時反白，放開就選好了（見 dashboard.js）。
+     起點不必壓在列上——列與列的間隙、分類群組之間的間隙，只要還在這個容器
+     範圍內、沒有壓到互動元件或 <summary>，一樣可以當起點開始拖曳。
+     .server-select-scope 是共用類別，封存區也有一份，兩邊各自獨立成一個拖曳範圍。 -#}
+  <div class="server-groups-scope server-select-scope" id="server-groups-scope">
+    {% for g in server.groups %}
+      <details class="server-group" data-cat="{{ g.id }}" open>
+        <summary>
+          <i data-lucide="chevron-right" class="server-group-caret" style="width:15px;height:15px"></i>
+          <i data-lucide="{{ g.icon }}" style="width:15px;height:15px"></i>
+          <span class="server-group-name">{{ g.name }}</span>
+          <span class="server-group-count">{{ g.count }}</span>
+        </summary>
+        <div class="server-table" role="table">
+          {{ server_head() }}
+          {% for it in g.rows %}{{ server_row(it, is_editor) }}{% endfor %}
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <i data-lucide="server-off" style="width:48px;height:48px"></i>
+    <p>
+      <span class="zh">還沒有任何 bat 啟動指令</span>
+      <span class="en">No bat launch commands yet</span>
+    </p>
+    <p class="server-setup-hint">
+      <span class="zh">在任何卡片的「啟動指令」加一筆、類型選 <code>bat</code>，這裡就會自動出現。</span>
+      <span class="en">Add a launch command with env <code>bat</code> on any card.</span>
+    </p>
+  </div>
+{% endif %}
+
+{% if is_editor %}
+  {# 手動新增：像 n8n\start-n8n.bat 這種沒登記在任何卡片上的 bat。
+     之後若在卡片上補登同一個路徑，會自動合併成同一列（key 是路徑的雜湊）。 #}
+  <form class="server-add-form"
+        hx-post="/api/server/add" hx-target="#server-view" hx-swap="innerHTML">
+    <div class="server-add-head">
+      <i data-lucide="plus-circle" style="width:16px;height:16px"></i>
+      <span class="zh">手動新增一支 bat（沒有登記在卡片上的）</span>
+      <span class="en">Add a bat manually</span>
+    </div>
+    <div class="server-add-fields">
+      <input type="text" name="bat_path" required
+             class="server-add-path"
+             placeholder="C:\Users\AG_Di\Desktop\automation\Claude_code\n8n\start-n8n.bat"
+             aria-label="bat 的完整路徑">
+      <input type="text" name="label"
+             class="server-add-label" placeholder="顯示名稱（例：n8n）"
+             aria-label="顯示名稱">
+      <input type="text" name="port" inputmode="numeric"
+             class="server-add-port" placeholder="port"
+             aria-label="port（可留空）">
+      <button type="submit" class="server-add-btn">
+        <span class="zh">新增</span><span class="en">Add</span>
+      </button>
+    </div>
+    <p class="server-add-hint">
+      <span class="zh">路徑要填完整的 Windows 路徑、<code>.bat</code> 結尾。Port 留空也可以，但填了才偵測得到「執行中」、才能重開。<b>之後在卡片上補登同一個路徑，會自動合併成同一列，設定不會不見。</b></span>
+      <span class="en">Full Windows path ending in .bat. Registering the same path on a card later merges into the same row.</span>
+    </p>
+  </form>
+{% endif %}
+
+
+{% if server.skipped_installs %}
+  {# 被 is_install_bat() 自動略過的安裝腳本。
+     這些是「程式藏的」不是「使用者封存的」，一定要看得到，
+     否則哪天有支伺服器檔名剛好帶 setup 就會無聲消失、查不出原因。 #}
+  <details class="server-skipped-box">
+    <summary>
+      <i data-lucide="filter" style="width:14px;height:14px"></i>
+      <span class="zh">已自動略過 {{ server.skipped_installs | length }} 支安裝腳本</span>
+      <span class="en">{{ server.skipped_installs | length }} install scripts auto-skipped</span>
+    </summary>
+    <p class="server-skipped-hint">
+      <span class="zh">檔名或按鈕名稱含「安裝／install／setup」的會自動不進這份清單——它們跑完就結束，不是常駐服務。<b>卡片上的按鈕還在</b>，只是不出現在這裡。</span>
+      <span class="en">Anything named 安裝 / install / setup is kept out of this list. The card buttons still work.</span>
+    </p>
+    <ul class="server-skipped-list">
+      {% for it in server.skipped_installs %}
+        <li>
+          <span class="server-skipped-name">{{ it.tool_name }}</span>
+          <span class="server-skipped-label">{{ it.label }}</span>
+          <code>{{ it.bat_path }}</code>
+        </li>
+      {% endfor %}
+    </ul>
+  </details>
+{% endif %}
+
+{% if server.archived %}
+  <details class="server-archive-box">
+    <summary>
+      <i data-lucide="archive" style="width:15px;height:15px"></i>
+      <span class="zh">已封存（{{ server.archived | length }}）</span>
+      <span class="en">Archived ({{ server.archived | length }})</span>
+    </summary>
+    <div class="server-table server-table-archived{% if is_editor %} server-select-scope{% endif %}">
+      {% for it in server.archived %}
+        <div class="server-row server-row-archived" role="row"
+             {% if is_editor %}data-bat-key="{{ it.bat_key }}" tabindex="0" aria-selected="false"{% endif %}>
+          <span class="server-col-name" role="cell">
+            {{ it.label }}
+            <small class="server-src-tool">
+              {% if it.manual %}<span class="server-manual-tag">手動</span>{% endif %}{{ it.tool_name }}
+            </small>
+          </span>
+          <span class="server-col-path" role="cell" title="{{ it.bat_path }}">{{ it.bat_path }}</span>
+          <span class="server-col-act" role="cell">
+            {% if is_editor %}
+              <button type="button" class="server-unarchive-btn"
+                      hx-post="/api/server/{{ it.bat_key }}/archive"
+                      hx-target="#server-view" hx-swap="innerHTML"
+                      aria-label="解除封存 {{ it.label }}"
+                      title="解除封存，放回上面的清單">
+                <i data-lucide="archive-restore" style="width:14px;height:14px"></i>
+                <span class="zh">解除封存</span><span class="en">Restore</span>
+              </button>
+            {% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  </details>
+{% endif %}

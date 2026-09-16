@@ -19,6 +19,10 @@ from data.tools import (
     load_quick_inputs, save_quick_input_settings, build_local_map,
 )
 from data.auto_tag import auto_tag_all
+from data.launcher import (
+    build_server_rows, upsert_entry, get_manifest, TableMissing,
+    add_manual_entry, delete_entry, validate_bat_path,
+)
 from routes.auth import login_required, editor_required, private_read_guard
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -50,7 +54,7 @@ def _allowed_file(filename: str) -> bool:
 
 def _grid_response(category=None, q=None, toast_msg=None, include_oob=True, status=None,
                    has_external=False, has_local_url=False, has_notion=False,
-                   has_github=False, has_gas=False):
+                   has_github=False, has_gas=False, extra=None):
     """Return re-rendered grid partial with optional toast + OOB featured swap."""
     hero = get_highlight_tool()
     groups = tools_grouped_by_category(category, q, status, has_external, has_local_url,
@@ -72,8 +76,13 @@ def _grid_response(category=None, q=None, toast_msg=None, include_oob=True, stat
         # 同步刷新「本地」分頁(port → 工具對照)，免使用者 F5
         html += render_template("partials/_local_oob.html", local_map=build_local_map(load_tools()))
     resp = make_response(html)
+    trigger = {}
     if toast_msg:
-        resp.headers["HX-Trigger"] = json.dumps({"showToast": toast_msg})
+        trigger["showToast"] = toast_msg
+    if extra:
+        trigger.update(extra)
+    if trigger:
+        resp.headers["HX-Trigger"] = json.dumps(trigger)
     return resp
 
 
@@ -156,10 +165,19 @@ def new_form():
 @editor_required
 def update(tool_id):
     form = request.form.to_dict()
+    before = get_tool(tool_id)
     tool = update_tool(tool_id, form)
     if not tool:
         return "Tool not found", 404
-    return _grid_response(toast_msg=f"已更新工具：{tool['name']}")
+    # 封存狀態有變動 → 問要不要順便對它的 bat 做同一件事（兩邊刻意不自動連動）
+    extra = None
+    if before and before.get("status") != tool.get("status"):
+        extra = _server_link_prompt(
+            tool_id,
+            tool.get("name_zh") or tool.get("name") or tool_id,
+            tool.get("status") == "archived",
+        )
+    return _grid_response(toast_msg=f"已更新工具：{tool['name']}", extra=extra)
 
 
 @bp.route("/auto-tag", methods=["POST"])
@@ -413,3 +431,340 @@ def suggest():
     tags = _extract_tags(combined)
 
     return jsonify({"name_en": name_en, "tags": tags})
+
+
+# ====================================================================
+# 伺服器分頁（Server_Launcher 伺服器總管）
+# --------------------------------------------------------------------
+# 清單是從 tools.commands 裡 env='bat' 的項目動態生成，這裡只負責存狀態。
+# 每個 toggle 都回傳整塊重繪的 HTML，沿用專案既有的 HTMX 就地刷新模式，
+# 不用整頁 F5。
+# ====================================================================
+
+def _server_response(toast_msg=None, extra=None):
+    """重繪整個伺服器分頁（含封存區）。
+
+    ♻️ 沿用 _grid_response 的 toast 模式：用 HX-Trigger 標頭觸發，不另外塞 partial。
+    extra：要一起送出的其他 HX-Trigger 事件（例如「要不要順便封存卡片」的詢問）。
+    """
+    data = build_server_rows(load_tools())
+    html = render_template("partials/_server_list.html", server=data)
+    resp = make_response(html)
+    trigger = {}
+    if toast_msg:
+        trigger["showToast"] = toast_msg
+    if extra:
+        trigger.update(extra)
+    if trigger:
+        resp.headers["HX-Trigger"] = json.dumps(trigger)
+    return resp
+
+
+def _find_row(data, bat_key):
+    for r in data["active"] + data["archived"]:
+        if r["bat_key"] == bat_key:
+            return r
+    return None
+
+
+@bp.route("/server", methods=["GET"])
+@private_read_guard
+def server_list():
+    return _server_response()
+
+
+@bp.route("/server/<bat_key>/toggle", methods=["POST"])
+@editor_required
+def server_toggle(bat_key):
+    """顯示／不顯示：要不要出現在本機總管的清單上。"""
+    data = build_server_rows(load_tools())
+    row = _find_row(data, bat_key)
+    if not row:
+        return "Entry not found", 404
+    new_val = not row["visible"]
+    try:
+        upsert_entry(bat_key, bat_path=row["bat_path"], tool_id=row["tool_id"], sort_order=row["sort_order"],
+                 visible=new_val, port=row["port"])
+    except TableMissing:
+        return _server_response(
+            toast_msg='還沒建資料表，請先把 supabase_db/launcher_entries.sql 貼到 Supabase SQL Editor 執行')
+    msg = f"已顯示：{row['label']}" if new_val else f"已隱藏：{row['label']}"
+    return _server_response(toast_msg=msg)
+
+
+@bp.route("/server/<bat_key>/default", methods=["POST"])
+@editor_required
+def server_default(bat_key):
+    """預設打勾：總管一打開就先勾起來（＝開機會自動開）。"""
+    data = build_server_rows(load_tools())
+    row = _find_row(data, bat_key)
+    if not row:
+        return "Entry not found", 404
+    new_val = not row["default_on"]
+    try:
+        upsert_entry(bat_key, bat_path=row["bat_path"], tool_id=row["tool_id"], sort_order=row["sort_order"],
+                 default_on=new_val, port=row["port"])
+    except TableMissing:
+        return _server_response(
+            toast_msg='還沒建資料表，請先把 supabase_db/launcher_entries.sql 貼到 Supabase SQL Editor 執行')
+    msg = f"已設為預設啟動：{row['label']}" if new_val else f"已取消預設：{row['label']}"
+    return _server_response(toast_msg=msg)
+
+
+@bp.route("/server/<bat_key>/archive", methods=["POST"])
+@editor_required
+def server_archive(bat_key):
+    """封存／解除封存。封存＝收進摺疊區，總管完全看不到它。"""
+    data = build_server_rows(load_tools())
+    row = _find_row(data, bat_key)
+    if not row:
+        return "Entry not found", 404
+    new_val = not row["archived"]
+    try:
+        upsert_entry(bat_key, bat_path=row["bat_path"], tool_id=row["tool_id"], sort_order=row["sort_order"],
+                 archived=new_val, port=row["port"])
+    except TableMissing:
+        return _server_response(
+            toast_msg='還沒建資料表，請先把 supabase_db/launcher_entries.sql 貼到 Supabase SQL Editor 執行')
+    msg = f"已封存：{row['label']}" if new_val else f"已解除封存：{row['label']}"
+    return _server_response(toast_msg=msg, extra=_card_link_prompt(row, new_val))
+
+
+@bp.route("/server/<bat_key>/label", methods=["POST"])
+@editor_required
+def server_label(bat_key):
+    """改顯示名稱（＝總管的分頁名稱）。清空＝恢復自動帶的名字。"""
+    data = build_server_rows(load_tools())
+    row = _find_row(data, bat_key)
+    if not row:
+        return "Entry not found", 404
+    label = (request.form.get("label") or "").strip()
+    try:
+        upsert_entry(bat_key, bat_path=row["bat_path"], tool_id=row["tool_id"], sort_order=row["sort_order"],
+                 label=label, port=row["port"])
+    except TableMissing:
+        return _server_response(
+            toast_msg='還沒建資料表，請先把 supabase_db/launcher_entries.sql 貼到 Supabase SQL Editor 執行')
+    return _server_response(toast_msg=f"已改名：{label or row['auto_label']}")
+
+
+@bp.route("/server/<bat_key>/port", methods=["POST"])
+@editor_required
+def server_port(bat_key):
+    """手動補 port。卡片的網址沒寫 port 時，填了才有「執行中／重開」的偵測。"""
+    data = build_server_rows(load_tools())
+    row = _find_row(data, bat_key)
+    if not row:
+        return "Entry not found", 404
+    raw = (request.form.get("port") or "").strip()
+    try:
+        port = int(raw) if raw else 0
+    except ValueError:
+        port = 0
+    if port and not (1 <= port <= 65535):
+        port = 0
+    try:
+        upsert_entry(bat_key, bat_path=row["bat_path"], tool_id=row["tool_id"], sort_order=row["sort_order"], port=port)
+    except TableMissing:
+        return _server_response(
+            toast_msg='還沒建資料表，請先把 supabase_db/launcher_entries.sql 貼到 Supabase SQL Editor 執行')
+    return _server_response(toast_msg=f"已更新 port：{row['label']} → {port or '（無）'}")
+
+
+@bp.route("/server/manifest", methods=["GET"])
+@private_read_guard
+def server_manifest():
+    """給本機伺服器總管讀的 JSON 清單。
+
+    只回「要顯示且沒封存」的項目，另附被封存的 key，
+    讓總管可以把本機掃到、但已在這裡封存的項目一併藏掉。
+    """
+    tools = load_tools()
+    data = build_server_rows(tools)
+    return jsonify({
+        "items": get_manifest(tools),
+        "archived_paths": [r["bat_path"] for r in data["archived"]],
+        "hidden_paths": [r["bat_path"] for r in data["active"] if not r["visible"]],
+    })
+
+
+@bp.route("/server/add", methods=["POST"])
+@editor_required
+def server_add():
+    r"""手動新增一支沒有登記在任何卡片上的 bat（例：n8n\start-n8n.bat）。"""
+    raw = request.form.get("bat_path") or ""
+    label = (request.form.get("label") or "").strip()
+    raw_port = (request.form.get("port") or "").strip()
+
+    path, err = validate_bat_path(raw)
+    if err:
+        return _server_response(toast_msg=f"新增失敗：{err}")
+
+    try:
+        port = int(raw_port) if raw_port else None
+    except ValueError:
+        port = None
+    if port is not None and not (1 <= port <= 65535):
+        port = None
+
+    try:
+        add_manual_entry(path, label, port)
+    except TableMissing:
+        return _server_response(
+            toast_msg='還沒建資料表，請先把 supabase_db/launcher_entries.sql 貼到 Supabase SQL Editor 執行')
+    return _server_response(toast_msg=f"已新增：{label or path.rsplit(chr(92), 1)[-1]}")
+
+
+@bp.route("/server/<bat_key>/delete", methods=["POST"])
+@editor_required
+def server_delete(bat_key):
+    """刪掉手動新增的項目。卡片來的不給刪（刪了下次還是會從卡片長回來）。"""
+    data = build_server_rows(load_tools())
+    row = _find_row(data, bat_key)
+    if not row:
+        return "Entry not found", 404
+    if not row.get("manual"):
+        return _server_response(toast_msg="這是從卡片來的，不能刪；請改用「封存」")
+    try:
+        delete_entry(bat_key)
+    except TableMissing:
+        return _server_response(toast_msg="還沒建資料表")
+    return _server_response(toast_msg=f"已刪除：{row['label']}")
+
+
+# =====================================================================
+# 批次調整 ＋ 封存連動（Dino 2026-09-15）
+# ---------------------------------------------------------------------
+# 「伺服器封存」和「卡片封存」是兩套獨立狀態，刻意不自動連動：
+#   伺服器：launcher_entries.archived  → 這支 bat 要不要進 CLI 總管
+#   卡片　：tools.status == 'archived' → 這張卡片要不要出現在卡片牆
+# 一支 bat 不想開機自動開，不代表整個專案要從儀表板消失，所以不硬綁。
+# 改其中一邊時回一個「要不要順便改另一邊」的詢問事件，由使用者決定。
+# =====================================================================
+
+_BATCH_ACTIONS = {
+    "show":        ("visible",    True,  "已顯示"),
+    "hide":        ("visible",    False, "已隱藏"),
+    "default_on":  ("default_on", True,  "已設為預設啟動"),
+    "default_off": ("default_on", False, "已取消預設"),
+    "archive":     ("archived",   True,  "已封存"),
+    "unarchive":   ("archived",   False, "已解除封存"),
+}
+
+
+def _card_link_prompt(row, archived_now):
+    """伺服器那邊封存／解封存之後，問要不要順便對卡片做同一件事。
+
+    只有「狀態真的不一致」才問，避免每次都跳提示。
+    """
+    tool_id = row.get("tool_id")
+    if not tool_id:
+        return None
+    tool = get_tool(tool_id)
+    if not tool:
+        return None
+    card_archived = (tool.get("status") == "archived")
+    if card_archived == archived_now:
+        return None
+    return {"askArchiveCard": {
+        "tool_id": tool_id,
+        "tool_name": tool.get("name_zh") or tool.get("name") or tool_id,
+        "bat_label": row.get("label") or "",
+        "archive": archived_now,
+    }}
+
+
+@bp.route("/server/batch", methods=["POST"])
+@editor_required
+def server_batch():
+    """一次調整多支 bat：顯示／隱藏／預設／取消預設／封存／解除封存。
+
+    前端把勾選到的 bat_key 全部放在 bat_keys 送過來。
+    ♻️ 沿用 upsert_entry，不另外寫一套寫入邏輯。
+    """
+    action = (request.form.get("action") or "").strip()
+    if action not in _BATCH_ACTIONS:
+        return "Unknown action", 400
+    keys = [k for k in request.form.getlist("bat_keys") if k]
+    if not keys:
+        return _server_response(toast_msg="一個都沒選")
+
+    field, value, verb = _BATCH_ACTIONS[action]
+    data = build_server_rows(load_tools())
+    done, skipped = 0, 0
+    try:
+        for key in keys:
+            row = _find_row(data, key)
+            if not row:
+                skipped += 1
+                continue
+            if bool(row.get(field)) == value:   # 本來就是這個狀態，不用白寫一次
+                skipped += 1
+                continue
+            upsert_entry(key, bat_path=row["bat_path"], tool_id=row["tool_id"],
+                         sort_order=row["sort_order"], port=row["port"],
+                         **{field: value})
+            done += 1
+    except TableMissing:
+        return _server_response(
+            toast_msg="還沒建資料表，請先把 supabase_db/launcher_entries.sql 貼到 Supabase SQL Editor 執行")
+
+    msg = f"{verb} {done} 項"
+    if skipped:
+        msg += f"（{skipped} 項本來就是這樣，略過）"
+    return _server_response(toast_msg=msg)
+
+
+@bp.route("/server/archive-card/<tool_id>", methods=["POST"])
+@editor_required
+def server_archive_card(tool_id):
+    """把伺服器那邊的封存決定，套到對應的卡片上（使用者按了「一起封存」才會走這裡）。"""
+    tool = get_tool(tool_id)
+    if not tool:
+        return "Tool not found", 404
+    archive = (request.form.get("archive") or "").lower() in ("1", "true", "on", "yes")
+    update_tool(tool_id, {"status": "archived" if archive else "active"})
+    name = tool.get("name_zh") or tool.get("name") or tool_id
+    verb = "已一併封存卡片" if archive else "已一併解除卡片封存"
+    return _server_response(toast_msg=f"{verb}：{name}")
+
+
+@bp.route("/tool/<tool_id>/archive-servers", methods=["POST"])
+@editor_required
+def tool_archive_servers(tool_id):
+    """把卡片的封存決定，套到它底下所有 bat 上（使用者按了「一起封存」才會走這裡）。"""
+    archive = (request.form.get("archive") or "").lower() in ("1", "true", "on", "yes")
+    data = build_server_rows(load_tools())
+    rows = [r for r in (data["active"] + data["archived"]) if r.get("tool_id") == tool_id]
+    if not rows:
+        return _grid_response(toast_msg="這張卡片沒有對應的 bat")
+    try:
+        n = 0
+        for r in rows:
+            if bool(r.get("archived")) == archive:
+                continue
+            upsert_entry(r["bat_key"], bat_path=r["bat_path"], tool_id=tool_id,
+                         sort_order=r["sort_order"], port=r["port"], archived=archive)
+            n += 1
+    except TableMissing:
+        return _grid_response(toast_msg="還沒建資料表")
+    verb = "已一併封存" if archive else "已一併解除封存"
+    return _grid_response(toast_msg=f"{verb} {n} 支 bat")
+
+
+def _server_link_prompt(tool_id, tool_name, archived_now):
+    """卡片那邊改了封存狀態之後，問要不要順便對它的 bat 做同一件事。"""
+    try:
+        data = build_server_rows(load_tools())
+    except Exception:
+        return None
+    rows = [r for r in (data["active"] + data["archived"]) if r.get("tool_id") == tool_id]
+    mismatched = [r for r in rows if bool(r.get("archived")) != archived_now]
+    if not mismatched:
+        return None
+    return {"askArchiveServers": {
+        "tool_id": tool_id,
+        "tool_name": tool_name,
+        "count": len(mismatched),
+        "archive": archived_now,
+    }}

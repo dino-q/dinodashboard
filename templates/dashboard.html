@@ -138,6 +138,10 @@
       <button type="button" class="view-toggle-btn" data-view="local" onclick="setViewMode('local')">
         <span class="zh">本地</span><span class="en">Local</span>
       </button>
+      <span class="view-toggle-sep">/</span>
+      <button type="button" class="view-toggle-btn" data-view="server" onclick="setViewMode('server')">
+        <span class="zh">伺服器</span><span class="en">Servers</span>
+      </button>
     </div>
     <h2 class="section-title">
       <span class="zh">所有作品</span><span class="en">All Works</span>
@@ -331,6 +335,13 @@
     <!-- 內層抽成 partials/_local_list.html，HTMX CRUD 回應用 _local_oob.html 就地刷新（無需 F5） -->
     <div class="local-view" id="local-view">
       {% include "partials/_local_list.html" %}
+    </div>
+
+    <!-- ===== SERVER VIEW — 伺服器總管設定（toggled via .show-server on #projects） ===== -->
+    <!-- 清單自動從各卡片 env='bat' 的啟動指令生成；三個開關存在 launcher_entries 表。 -->
+    <!-- 每個 toggle 的 HTMX 回應直接重繪 #server-view 內層，不用整頁 F5。 -->
+    <div class="server-view" id="server-view">
+      {% include "partials/_server_list.html" %}
     </div>
   </div>
 

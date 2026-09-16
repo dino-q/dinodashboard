@@ -20,9 +20,10 @@ from typing import Any
 from data.supabase_client import get_client
 from data.tools import load_tools
 
-# Automation root on Linux host (mapped from Windows: C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution)
+# Automation root on Linux host (mapped from Windows: C:\Users\AG_Di\Desktop\automation\Claude_code)
+# 2026-09-03 起 Docker 版改掛 Claude_code 整個根（原本是 automatic_evolution 子資料夾，已拆散）
 AUTOMATION_ROOT = Path("/app")
-WIN_PREFIX = r"C:\Users\AG_Di\Desktop\automation\Claude_code\automatic_evolution"
+WIN_PREFIX = r"C:\Users\AG_Di\Desktop\automation\Claude_code"
 
 
 def to_local_path(path_str: str) -> Path | None:

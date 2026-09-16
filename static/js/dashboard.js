@@ -645,8 +645,12 @@ function setViewMode(mode) {
 
 function applyViewMode(mode) {
   const isLocal = mode === 'local';
+  const isServer = mode === 'server';
   const section = document.getElementById('projects');
-  if (section) section.classList.toggle('show-local', isLocal);
+  if (section) {
+    section.classList.toggle('show-local', isLocal);
+    section.classList.toggle('show-server', isServer);
+  }
 
   const grid = document.getElementById('tool-grid');
   if (grid) {
@@ -656,8 +660,450 @@ function applyViewMode(mode) {
   document.querySelectorAll('.view-toggle-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === mode);
   });
-  // Lucide icons inside the local view render after first switch — refresh.
-  if (isLocal && window.lucide) window.lucide.createIcons();
+  // Lucide icons inside the local / server views render after first switch — refresh.
+  if ((isLocal || isServer) && window.lucide) window.lucide.createIcons();
+  // 伺服器分頁在切過來這一刻才從 display:none 變可見，捲動槽的寬度也才量得到。
+  if (isServer && typeof updateServerFilterPillsOverflow === 'function') updateServerFilterPillsOverflow();
+}
+
+// 伺服器分頁的每個 toggle 都會重繪 #server-view，換掉的 HTML 裡有 Lucide 佔位元素，
+// 不重新 createIcons 的話圖示會整批消失。
+document.body.addEventListener('htmx:afterSwap', (e) => {
+  const tgt = e.detail && e.detail.target;
+  if (tgt && tgt.id === 'server-view') {
+    if (window.lucide) window.lucide.createIcons();
+    restoreServerCategory();   // 重繪後把分類篩選選回來
+    // 搜尋字也要還原：按個開關就把打到一半的搜尋清掉很惱人
+    const input = document.getElementById('server-search-input');
+    if (input && _serverQuery) input.value = _serverQuery;
+    applyServerSearch();
+    updateServerFilterPillsOverflow();  // 重繪後分類數量可能變了，重新量一次要不要顯示「⋯」
+    // 整塊 #server-view 被換掉，列本來就會重繪成未選取狀態 —— 把選取記憶體一併歸零，
+    // 免得批次列還顯示舊的「已選 N 項」但畫面上其實沒有任何一列是反白的。
+    serverSelectClearAll();
+  }
+});
+// 首次載入也要套用一次
+document.addEventListener('DOMContentLoaded', restoreServerCategory);
+
+// 伺服器分頁：點整列 → 開該工具的卡片詳情（行為對齊「本地」分頁）。
+// 這一列上有開關、勾選框、名稱/port 輸入框、複製與封存按鈕，
+// 點到那些元件時必須「不要」開 modal，否則會邊打字邊彈視窗。
+// 伺服器分頁：依分類篩選。純前端切換顯隱，不打伺服器，
+// 選到的分類記在 localStorage，HTMX 重繪後會自動還原。
+const SERVER_CAT_KEY = 'dino-server-category';
+
+function setServerCategory(btn, cat) {
+  try { localStorage.setItem(SERVER_CAT_KEY, cat); } catch (e) { /* 無痕模式 */ }
+  applyServerCategory(cat);
+}
+
+function applyServerCategory(cat) {
+  const view = document.getElementById('server-view');
+  if (!view) return;
+  view.querySelectorAll('.server-filter-pill').forEach(b => {
+    b.classList.toggle('active', b.dataset.cat === cat);
+  });
+  // 溢出選單（"⋯"）裡的項目也要跟著同步，不然選單自己的高亮會跟列上的 pill 對不起來
+  view.querySelectorAll('.server-filter-pills-more-item').forEach(m => {
+    m.classList.toggle('active', m.dataset.cat === cat);
+  });
+  view.querySelectorAll('.server-group').forEach(g => {
+    const show = (cat === '__all__' || g.dataset.cat === cat);
+    g.hidden = !show;
+    // 單選某一類時自動展開，免得還要再點一次
+    if (show && cat !== '__all__') g.open = true;
+  });
+}
+
+function restoreServerCategory() {
+  let cat = '__all__';
+  try { cat = localStorage.getItem(SERVER_CAT_KEY) || '__all__'; } catch (e) { /* noop */ }
+  const view = document.getElementById('server-view');
+  // 選過的分類可能已經整組消失（全部封存了），那就退回全部
+  if (view && cat !== '__all__' && !view.querySelector('.server-group[data-cat="' + cat + '"]')) {
+    cat = '__all__';
+  }
+  applyServerCategory(cat);
+}
+
+// 伺服器分頁：搜尋。純前端過濾，比對每一列預先算好的 data-search
+// （名稱＋來源卡片＋bat 路徑＋port，後端已經轉小寫）。
+// 空白分隔的多個關鍵字視為 AND，例如「ptt 8877」。
+let _serverQuery = '';
+
+function filterServerRows(q) {
+  _serverQuery = (q || '').trim().toLowerCase();
+  applyServerSearch();
+}
+
+function clearServerSearch() {
+  const input = document.getElementById('server-search-input');
+  if (input) input.value = '';
+  filterServerRows('');
+}
+
+function applyServerSearch() {
+  const view = document.getElementById('server-view');
+  if (!view) return;
+  const terms = _serverQuery ? _serverQuery.split(/\s+/) : [];
+  let shown = 0;
+
+  view.querySelectorAll('.server-group').forEach(group => {
+    let hitsInGroup = 0;
+    group.querySelectorAll('.server-row[data-search]').forEach(row => {
+      const hay = row.dataset.search || '';
+      const hit = terms.every(t => hay.includes(t));
+      row.hidden = !hit;
+      if (hit) { hitsInGroup++; shown++; }
+    });
+    // 搜尋時：整組沒命中就收起來；有命中就強制展開，免得還要手動點
+    if (terms.length) {
+      group.dataset.searchEmpty = hitsInGroup ? '' : '1';
+      if (hitsInGroup) group.open = true;
+    } else {
+      delete group.dataset.searchEmpty;
+    }
+  });
+
+  const counter = document.getElementById('server-search-count');
+  if (counter) counter.textContent = terms.length ? ('找到 ' + shown + ' 筆') : '';
+  const box = view.querySelector('.server-search');
+  if (box) box.classList.toggle('has-query', terms.length > 0);
+}
+
+
+// ---------- 伺服器分頁：拖曳掃過多選 ＋ 批次調整（Dino 2026-09-15，同日追加修訂）----------
+// 不用勾選框，選取狀態單純用「整列換底色」表示；主要操作是按住滑鼠左鍵、
+// 拖過去掃過幾列（也可以從列與列之間的空白處起拖），那幾列就即時反白、放開後維持選取。
+// 選取狀態只存在前端記憶體：#server-view 整塊被 HTMX 換掉時（不管是不是批次動作
+// 觸發的）列本來就會被重繪成未選取，所以每次 afterSwap 都直接歸零，不嘗試「保留」。
+const serverSelection = new Set();   // Set<bat_key>
+
+// 拆成兩半是刻意的：批次列從 hidden 變顯示的那一刻，會連動改變 #server-view 的
+// padding-bottom（見 updateServerBatchBarSpacing）。如果拖曳過程中每移動一次都
+// 順便切換批次列，選到第一列的當下版面就會跟著調整，滑鼠底下對到的列可能瞬間
+// 變成別列，範圍會算錯（這是實測抓到的真的會發生的問題，不是假設）。所以拖曳
+// 中途只更新列本身的反白，批次列的顯示/隱藏、文字與版面留白，等放開滑鼠那一刻
+// （endDrag）才一次套用。
+function serverSelectSyncRows() {
+  document.querySelectorAll('#server-view .server-row[data-bat-key]').forEach((row) => {
+    const on = serverSelection.has(row.dataset.batKey);
+    row.classList.toggle('is-selected', on);
+    row.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+function serverSelectSyncBar() {
+  const bar = document.getElementById('server-batch-bar');
+  const countEl = document.getElementById('server-batch-count');
+  const n = serverSelection.size;
+  if (bar) bar.hidden = n === 0;
+  if (countEl) countEl.textContent = `已選 ${n} 項`;
+  updateServerBatchBarSpacing();
+}
+
+// 批次列 2026-09-15 起改成 position:fixed 貼在畫面底部、捲動時一直看得見。
+// Dino 的既有規則：固定可以，但不可以遮擋內容。做法：量出這條列實際渲染高度
+// （含窄螢幕變直式排列時變高的情況），寫進 --server-batch-bar-h 這個 CSS 變數，
+// 同時直接把 #server-view 的 inline padding-bottom 加大同樣的量——
+// 捲到最底時，固定列底下對到的是這段特地留出來的空白，不是任何一列。
+// 用 inline style 而不是疊一條 CSS 規則，是為了不用去跟既有的
+// `.projects-section.show-server .server-view { padding-bottom: 48px; }`
+// 比選擇器優先權（3 個 class vs 更少），inline style 保證一定生效、也保證
+// 批次列收起來時能乾淨地退回原本的 48px（設回空字串即可）。
+function updateServerBatchBarSpacing() {
+  const bar = document.getElementById('server-batch-bar');
+  const view = document.getElementById('server-view');
+  if (!bar || !view) return;
+  if (bar.hidden) {
+    view.style.paddingBottom = '';
+    document.documentElement.style.setProperty('--server-batch-bar-h', '0px');
+    document.body.classList.remove('has-server-batch-bar');
+    return;
+  }
+  document.body.classList.add('has-server-batch-bar');
+  const h = bar.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--server-batch-bar-h', h + 'px');
+  view.style.paddingBottom = 'calc(48px + ' + h + 'px + 16px)';
+}
+
+// 視窗尺寸改變（例如窄螢幕觸發批次列直式排列、高度變高）時，批次列還顯示的話
+// 要重新量一次高度，不然底部留白會跟實際高度對不起來。
+(function () {
+  let t = null;
+  window.addEventListener('resize', () => {
+    const bar = document.getElementById('server-batch-bar');
+    if (!bar || bar.hidden) return;
+    clearTimeout(t);
+    t = setTimeout(updateServerBatchBarSpacing, 120);
+  });
+})();
+
+function serverSelectSync() {
+  serverSelectSyncRows();
+  serverSelectSyncBar();
+}
+
+function serverSelectClearAll() {
+  serverSelection.clear();
+  serverSelectSync();
+}
+
+// 目前「看得到」的可選列（搜尋/分類篩掉的、收合分類裡的都不算），依畫面上下順序排列。
+// 拖曳掃過（依索引算範圍）跟鍵盤 Tab 導覽都靠這份清單。
+function _serverVisibleRowsIn(scopeEl) {
+  return Array.from(scopeEl.querySelectorAll('.server-row[data-bat-key]'))
+    .filter((r) => r.offsetParent !== null);
+}
+
+// 批次送出：用一個(不掛進畫面的)暫時 <form> 帶著多筆同名 bat_keys，
+// 交給 htmx.ajax 的 source 選項去序列化 —— 這樣才會產生後端要的
+// 「bat_keys=xxx&bat_keys=yyy」重複欄位格式，跟原生表單勾選提交行為一致。
+function serverBatchAction(action) {
+  if (!serverSelection.size || !window.htmx) return;
+  const form = document.createElement('form');
+  form.style.display = 'none';
+  serverSelection.forEach((key) => {
+    const inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'bat_keys';
+    inp.value = key;
+    form.appendChild(inp);
+  });
+  const actionInp = document.createElement('input');
+  actionInp.type = 'hidden';
+  actionInp.name = 'action';
+  actionInp.value = action;
+  form.appendChild(actionInp);
+  document.body.appendChild(form);
+
+  htmx.ajax('POST', '/api/server/batch', { source: form, target: '#server-view', swap: 'innerHTML' })
+    .finally(() => form.remove());
+}
+
+// ---------- 拖曳掃過多選：按住滑鼠左鍵、掃過幾列，放開就選好了 ----------
+// 只在滑鼠（非觸控）左鍵拖曳時啟動：觸控裝置的滑動手勢是想捲動頁面，硬要在同一個
+// 手勢上疊加拖曳選取反而會跟捲動打架，窄螢幕/觸控一律回退成「逐列點一下選取」
+// （見下面的 click 委派：沒有卡片可開的列，單擊就直接選取自己；有卡片可開的列，
+// 要選取用鍵盤 Space，或者拖曳哪怕只掃過一列也算——不犧牲既有的「點一下開詳情」）。
+//
+// 2026-09-15 追加：起點不必壓在列上。只要落在 .server-select-scope 範圍內、
+// 不是互動元件、也不是 <summary>（分類標題本身要保留原生展開/收合），
+// 空白處（列與列間隙、群組與群組間隙）一樣可以當拖曳起點；真正的選取範圍
+// 一律用「拖曳過程中實際碰到的第一列」當錨點，跟起點是不是精準壓在列上無關。
+(function serverSweepSelectSetup() {
+  let dragging = false;
+  let dragMoved = false;
+  let dragShift = false;     // 這次拖曳一開始有沒有按著 Shift（加選模式）
+  let preSelection = null;   // Shift 拖曳前既有的選取內容，加選時要保留
+  let scopeEl = null;
+  let rows = [];
+  let anchorIdx = -1;
+  let startX = 0;
+  let startY = 0;
+  const THRESHOLD = 4; // px，超過這個距離才算「真的在拖」，避免手抖或單純點擊時誤觸
+
+  function rowUnderPoint(clientX, clientY, scope) {
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el) return null;
+    const row = el.closest('.server-row[data-bat-key]');
+    if (!row || !scope.contains(row)) return null;
+    return row;
+  }
+
+  // 拖曳中途只更新列反白（不動批次列/版面留白），理由見 serverSelectSyncRows() 上面的說明。
+  // 純拖曳＝重新框一個全新的範圍（取代舊選取，行為跟「點一下換成只選這列」一致）；
+  // Shift+拖曳＝把這段範圍「加」到拖曳前既有的選取上，不清掉拖曳前選好的列
+  // （跟 Shift+點擊「只切換這一列、不影響其他列」是同一套「Shift＝保留舊選取」原則）。
+  function applyRange(curIdx) {
+    const [start, end] = anchorIdx <= curIdx ? [anchorIdx, curIdx] : [curIdx, anchorIdx];
+    serverSelection.clear();
+    if (dragShift && preSelection) preSelection.forEach((k) => serverSelection.add(k));
+    for (let i = start; i <= end; i++) serverSelection.add(rows[i].dataset.batKey);
+    serverSelectSyncRows();
+  }
+
+  function endDrag() {
+    if (dragMoved) {
+      document.body.style.userSelect = '';
+      serverSelectSyncBar();  // 拖曳中途沒動過的批次列/版面留白，放開這一刻才一次套用
+      // 剛剛是拖曳，不是點擊：擋掉緊接著這次放開所觸發的 click，
+      // 不然會同時把伺服器列的卡片詳情 modal 打開（serverRowOpen 綁在整列的 onclick）。
+      window.__serverDragSuppressClick = true;
+      setTimeout(() => { window.__serverDragSuppressClick = false; }, 0);
+    }
+    dragging = false;
+    dragMoved = false;
+    dragShift = false;
+    preSelection = null;
+    scopeEl = null;
+    rows = [];
+    anchorIdx = -1;
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch' || e.button !== 0) return;
+    const scope = e.target.closest('.server-select-scope');
+    if (!scope) return;
+    // 從開關、輸入框（含改名稱那個）、按鈕、連結上開始按 → 是要操作那個元件本身
+    // （例如在改名稱的輸入框裡拖曳是在選取文字），不能被整列拖曳選取搶走。
+    if (e.target.closest('input, button, a, select, textarea, form, [role="switch"]')) return;
+    // <summary> 是分類標題本身的展開/收合開關，保留原生行為，不當拖曳起點。
+    if (e.target.closest('summary')) return;
+
+    // 這裡不要求 e.target 一定要落在某一列上：空白間隙（.server-table 的 row gap、
+    // .server-group 之間的 margin）也能當起點，anchorIdx 先留白，等 pointermove
+    // 真的碰到第一列時才決定錨點是哪一列。
+    const row = e.target.closest('.server-row[data-bat-key]');
+
+    // 按住不放在瀏覽器眼中預設是「開始選取文字」的手勢；先擋掉，拖曳時才不會
+    // 同時出現一條藍色文字選取範圍（空白處按下沒有文字可選，防呆不礙事）。
+    e.preventDefault();
+
+    dragging = true;
+    dragMoved = false;
+    dragShift = e.shiftKey;
+    preSelection = e.shiftKey ? new Set(serverSelection) : null;
+    scopeEl = scope;
+    startX = e.clientX;
+    startY = e.clientY;
+    rows = _serverVisibleRowsIn(scope);
+    anchorIdx = row ? rows.indexOf(row) : -1;
+  });
+
+  document.addEventListener('pointermove', (e) => {
+    if (!dragging || !scopeEl) return;
+    if (!dragMoved) {
+      if (Math.abs(e.clientX - startX) < THRESHOLD && Math.abs(e.clientY - startY) < THRESHOLD) return;
+      dragMoved = true;
+      document.body.style.userSelect = 'none';  // 拖曳這極短的當下關掉選字，放開就還原
+    }
+    // 起點在空白處、還沒決定錨點：用目前游標底下的列補上錨點
+    // （第一列真正被掃到的那一列，就是這次拖曳的起點）。
+    if (anchorIdx === -1) {
+      const startRow = rowUnderPoint(e.clientX, e.clientY, scopeEl);
+      if (!startRow) return;  // 一路都還在空白處，等真的碰到列再開始
+      anchorIdx = rows.indexOf(startRow);
+    }
+    const row = rowUnderPoint(e.clientX, e.clientY, scopeEl);
+    const curIdx = row ? rows.indexOf(row) : anchorIdx;
+    if (curIdx !== -1) applyRange(curIdx);
+  });
+
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+})();
+
+// ---------- Shift 多選模式（Dino 2026-09-15 第四輪追加）----------
+// 問題：Shift+點擊本來就能加選/減選單一列，但如果那一列剛好點在「改名稱」
+// 輸入框上，滑鼠事件會先被輸入框接走（觸發 focus/進入編輯），不會變成選取——
+// 誤觸機率很高。做法：按住 Shift 期間，整個清單進入「多選模式」，靠 CSS 把
+// 開關/輸入框/按鈕都設成 pointer-events:none（見 dashboard.css），點擊直接
+// 落在列本身，交給既有的 click 委派處理，不需要在 JS 這邊另外攔截或改寫規則。
+// 這裡只負責「同步 Shift 現在是不是按著」這一件事。
+let serverMultiselectActive = false;
+function setServerMultiselectActive(on) {
+  if (serverMultiselectActive === on) return;
+  serverMultiselectActive = on;
+  document.body.classList.toggle('server-multiselect-active', on);
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Shift') setServerMultiselectActive(true);
+});
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'Shift') setServerMultiselectActive(false);
+});
+// 視窗切走／分頁被蓋掉時，Shift 的 keyup 不會發生在這個頁面上（使用者是在別的
+// 視窗放開的），回來後如果不重置，多選模式會卡住、輸入框會一直點不到——
+// 任何「這個分頁可能漏接 keyup」的情境都直接強制解除。
+window.addEventListener('blur', () => setServerMultiselectActive(false));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) setServerMultiselectActive(false);
+});
+
+// ---------- 單擊 / Shift+單擊：沒有卡片可開的列（手動新增的、已封存的）。----------
+// 2026-09-15 追加「再選一次要能取消」＋「Shift 加選/減選」，四種手勢統一成一套原則：
+//   沒有 Shift（點擊、拖曳）＝「開新的選取」，取代舊選取；
+//   有 Shift（Shift+點擊、Shift+拖曳）＝「調整」，保留舊選取，只動這一個/這一段。
+// 對應到單一一列的點擊：
+//   Shift+點擊              → 只切換這一列，不影響其他已選的列（加選 or 減選各一個）
+//   點已選取的列（無 Shift）  → 取消這一列（「再選一次要能取消」）
+//   點未選取的列（無 Shift）  → 換成只選這一列，清掉其他（原有的「單擊即選」捷徑）
+// 有卡片可開的列（is-clickable）走 serverRowOpen()（inline onclick），同一套規則，
+// 差別只在「未選取 + 無 Shift」時是開卡片、不是選取——見那邊的註解。
+document.addEventListener('click', (e) => {
+  if (window.__serverDragSuppressClick) return;
+  const row = e.target.closest('#server-view .server-row[data-bat-key]');
+  if (!row) return;
+  if (e.target.closest('input, button, a, select, textarea, form, [role="switch"]')) return;
+  if (row.classList.contains('is-clickable')) return;  // 有卡片可開的列，交給 serverRowOpen 處理
+  const key = row.dataset.batKey;
+  if (e.shiftKey) {
+    if (serverSelection.has(key)) serverSelection.delete(key); else serverSelection.add(key);
+  } else if (serverSelection.has(key)) {
+    serverSelection.delete(key);
+  } else {
+    serverSelection.clear();
+    serverSelection.add(key);
+  }
+  serverSelectSync();
+});
+
+// ---------- 鍵盤：Tab 走到列上，Space 切換選取，Enter 開詳情（若該列可開） ----------
+// Space 本來就是「切換」語意，跟 Shift+點擊的原則一致，不用另外處理 Shift。
+document.addEventListener('keydown', (e) => {
+  if (e.key !== ' ' && e.key !== 'Enter') return;
+  const row = document.activeElement;
+  if (!row || !row.matches || !row.matches('.server-row[data-bat-key]')) return;
+  if (e.key === ' ') {
+    e.preventDefault();
+    const key = row.dataset.batKey;
+    if (serverSelection.has(key)) serverSelection.delete(key); else serverSelection.add(key);
+    serverSelectSync();
+  } else if (row.classList.contains('is-clickable')) {
+    e.preventDefault();
+    row.click();  // 走既有的 onclick=serverRowOpen，行為跟滑鼠點一下完全一致
+    // （含「已選取時 Enter＝取消選取、不開卡片」——刻意跟滑鼠點擊同一套規則，
+    // 不另外為鍵盤開特例；已選取的列想開卡片，先按 Space 取消選取再按 Enter。）
+  }
+});
+
+
+function serverRowOpen(ev, toolId) {
+  if (!toolId) return;
+  // 剛剛是拖曳掃過多選放開的那次 click，不是真的要開卡片（見上方拖曳選取的 IIFE）
+  if (window.__serverDragSuppressClick) return;
+  if (ev.target.closest('input, button, form, a, select, textarea, [role="switch"], [role="checkbox"]')) return;
+  if (window.getSelection && String(window.getSelection())) return;  // 正在選字就不要開
+
+  // 這一列如果也是可多選的列（伺服器分頁 editor 模式才有 data-bat-key），選取相關的
+  // 手勢要先處理，才輪到「開卡片」——跟上面「沒有卡片可開的列」共用同一套判斷原則：
+  //   Shift+點擊     → 只切換這一列，不開卡片，不影響其他已選的列
+  //   已選取＋無 Shift → 取消這一列，不開卡片（「再選一次要能取消」）
+  //   未選取＋無 Shift → 開卡片（原本的行為，不動），選取狀態維持原樣
+  // onclick="serverRowOpen(event, ...)" 掛在列本身，ev.currentTarget 就是那一列。
+  const row = ev.currentTarget;
+  const key = row && row.dataset ? row.dataset.batKey : null;
+  if (key) {
+    if (ev.shiftKey) {
+      if (serverSelection.has(key)) serverSelection.delete(key); else serverSelection.add(key);
+      serverSelectSync();
+      return;
+    }
+    if (serverSelection.has(key)) {
+      serverSelection.delete(key);
+      serverSelectSync();
+      return;
+    }
+  }
+
+  if (!window.htmx) return;
+  window.htmx.ajax('GET', '/api/tool/' + toolId + '/detail', {
+    target: '#modal-content',
+    swap: 'innerHTML',
+  });
+  if (typeof openModal === 'function') openModal();
 }
 
 // Apply on load + after any HTMX grid swap (so re-rendered grid keeps the mode)
@@ -814,6 +1260,85 @@ function showToast(msg, type = 'success') {
     setTimeout(() => toast.remove(), 300);
   }, 3000);
 }
+
+// ---------- 可操作的 toast（封存連動詢問要用「按鈕」，不是純文字）----------
+// 沿用同一個 #toast-container（既有、非遮擋的右下角角落通知位置），只是多一種
+// 「不自動消失、帶兩顆按鈕」的變體：這是需要使用者主動決定的問題，不是單純告知，
+// 3 秒自動消失反而會讓人來不及按就錯過。
+function showActionToast(msg, opts = {}) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-action';
+  toast.setAttribute('role', 'alert');
+
+  const msgEl = document.createElement('p');
+  msgEl.className = 'toast-action-msg';
+  msgEl.textContent = msg;
+  toast.appendChild(msgEl);
+
+  const btns = document.createElement('div');
+  btns.className = 'toast-action-btns';
+
+  const dismiss = () => {
+    toast.style.animation = 'toastOut .3s ease-out forwards';
+    setTimeout(() => toast.remove(), 300);
+  };
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'toast-action-btn toast-action-btn-primary';
+  confirmBtn.textContent = opts.confirmLabel || '一起處理';
+  confirmBtn.onclick = () => { dismiss(); if (typeof opts.onConfirm === 'function') opts.onConfirm(); };
+
+  const dismissBtn = document.createElement('button');
+  dismissBtn.type = 'button';
+  dismissBtn.className = 'toast-action-btn toast-action-btn-ghost';
+  dismissBtn.textContent = opts.dismissLabel || '不用，只改這邊';
+  dismissBtn.onclick = dismiss;
+
+  btns.appendChild(confirmBtn);
+  btns.appendChild(dismissBtn);
+  toast.appendChild(btns);
+  container.appendChild(toast);
+}
+
+// 伺服器列封存/解封存之後，若對應卡片狀態不一致 → 問要不要一起改（見 routes/api.py _card_link_prompt）
+document.body.addEventListener('askArchiveCard', (e) => {
+  const d = (e.detail && e.detail.value) || e.detail;
+  if (!d || !d.tool_id) return;
+  const verb = d.archive ? '封存' : '解除封存';
+  showActionToast(`已${verb}「${d.bat_label}」。要不要把卡片「${d.tool_name}」也一起${verb}？`, {
+    confirmLabel: `一起${verb}卡片`,
+    dismissLabel: '不用，只改這邊',
+    onConfirm: () => {
+      if (!window.htmx) return;
+      htmx.ajax('POST', `/api/server/archive-card/${d.tool_id}`, {
+        target: '#server-view',
+        swap: 'innerHTML',
+        values: { archive: d.archive ? '1' : '0' },
+      });
+    },
+  });
+});
+
+// 卡片封存/解封存之後，若底下有 bat 狀態不一致 → 問要不要一起改（見 routes/api.py _server_link_prompt）
+document.body.addEventListener('askArchiveServers', (e) => {
+  const d = (e.detail && e.detail.value) || e.detail;
+  if (!d || !d.tool_id) return;
+  const verb = d.archive ? '封存' : '解除封存';
+  showActionToast(`已${verb}卡片「${d.tool_name}」。要不要把它底下 ${d.count} 支伺服器 bat 也一起${verb}？`, {
+    confirmLabel: `一起${verb}`,
+    dismissLabel: '不用，只改這邊',
+    onConfirm: () => {
+      if (!window.htmx) return;
+      htmx.ajax('POST', `/api/tool/${d.tool_id}/archive-servers`, {
+        target: '#tool-grid',
+        swap: 'innerHTML',
+        values: { archive: d.archive ? '1' : '0' },
+      });
+    },
+  });
+});
 
 
 // ---------- Copy to clipboard ----------
@@ -1973,6 +2498,61 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeFilterMore();
+});
+
+
+// ---------- 伺服器分頁：分類 pill 溢出選單（同一套機制，獨立命名空間） ----------
+// 跟卡片分頁的 toggleFilterMore 系列邏輯一樣，但卡片分頁的版本是用
+// document.querySelector('.filter-pill' 等 class 選第一個符合的節點 — 伺服器分頁
+// 若共用同一個 class 會被卡片分頁的節點打架，所以整組複製一份、鎖定在 #server-view 底下。
+function toggleServerFilterMore(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('server-pills-more-menu');
+  if (!menu) return;
+  menu.hidden = !menu.hidden;
+  if (window.lucide && !menu.hidden) lucide.createIcons();
+}
+
+function closeServerFilterMore() {
+  const menu = document.getElementById('server-pills-more-menu');
+  if (menu) menu.hidden = true;
+}
+
+// 從「⋯」選單挑分類 → 鏡射到捲動槽裡對應的 pill（讓那顆 pill 也變 active、
+// 捲進可視範圍），再套用篩選、關選單。
+function pickServerCategoryFromMore(item, catId) {
+  const rowPill = document.querySelector(
+    '#server-view .server-filter-pills-scroll .server-filter-pill[data-cat="' + CSS.escape(catId) + '"]'
+  );
+  setServerCategory(rowPill || item, catId);
+  if (rowPill && rowPill.scrollIntoView) {
+    rowPill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+  closeServerFilterMore();
+}
+
+// 依實際捲動寬度決定要不要顯示「⋯」，跟卡片分頁一樣不是用分類數量猜。
+function updateServerFilterPillsOverflow() {
+  const scroll = document.querySelector('#server-view .server-filter-pills-scroll');
+  const wrap = document.getElementById('server-pills-more-wrap');
+  if (!scroll || !wrap) return;
+  const overflowing = scroll.scrollWidth > scroll.clientWidth + 1;
+  wrap.hidden = !overflowing;
+  if (!overflowing) closeServerFilterMore();
+}
+
+document.addEventListener('DOMContentLoaded', updateServerFilterPillsOverflow);
+window.addEventListener('resize', updateServerFilterPillsOverflow);
+// 伺服器分頁本身用 display:none 切換顯示（見 applyViewMode），切過去那一刻才量得到寬度，
+// 已經在 applyViewMode() 與 #server-view 的 htmx:afterSwap 分支各補一次呼叫。
+
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('server-pills-more-wrap');
+  if (!wrap || wrap.hidden) return;
+  if (!wrap.contains(e.target)) closeServerFilterMore();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeServerFilterMore();
 });
 
 

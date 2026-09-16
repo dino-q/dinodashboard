@@ -7,6 +7,7 @@ from data.tools import (
     load_tools, load_categories, get_highlight_tool, tools_grouped_by_category,
     build_local_map,
 )
+from data.launcher import build_server_rows
 from routes.auth import is_private_mode, is_logged_in
 
 bp = Blueprint("main", __name__)
@@ -57,6 +58,7 @@ def index():
         tech_count=len(all_tags),
         published=published,
         local_map=build_local_map(tools),
+        server=build_server_rows(tools),
         active_category=None,
         active_status=None,
     )
