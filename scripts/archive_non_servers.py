@@ -52,6 +52,10 @@ TARGETS = [
     (AUTO + r"\Python_code\PX_DM\From Python\run_px_dm.bat",     "跑完就結束"),
     (CC + r"\tools\How_To_Project\analyze.bat",                  "一次性分析工具"),
     (r"C:\Users\AG_Di\claude-debug.bat",                         "不在專案資料夾的偵錯腳本"),
+
+    # --- 總管自己：用總管去開總管沒有意義 ---
+    (CC + r"\system\Server_Launcher\伺服器總管.bat", "總管自己，用總管開總管沒意義"),
+    (CC + r"\system\Server_Launcher\開機啟動.bat",   "總管的開機模式入口"),
 ]
 
 

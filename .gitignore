@@ -36,3 +36,6 @@ data/card_*.json
 # Keep .gitkeep so dir exists in repo
 static/screenshots/*
 !static/screenshots/.gitkeep
+
+# 含公司 Notion 頁面 ID 的底稿，這是公開 repo，只留在本機（見 GIT_PUBLISH.md）
+docs/project-link-sync_Notion寫入草稿.md
