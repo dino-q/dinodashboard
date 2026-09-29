@@ -1,5 +1,18 @@
 # DinoDashboard — Render + Supabase + UptimeRobot 部署指南
 
+## cron-job.org 自動修復守門員
+
+GitHub Actions 每 30 分鐘執行 `scripts/cron_job_guardian.py`。守門員會先檢查
+`https://dinodashboard.onrender.com/ping-db`；只有端點回到 `200 ok` 時，才會透過
+cron-job.org API 重新啟用被停用的 `DinoDashboard Keepalive`。
+
+在 GitHub repo 的 `Settings → Secrets and variables → Actions` 新增 Repository secret：
+
+- Name：`CRON_JOB_ORG_API_KEY`
+- Secret：從 cron-job.org Console 的 `Settings` 產生的 API Key
+
+API Key 不可寫進 repo、workflow、`.env.example` 或文件。
+
 這份文件是一次性的上線步驟清單。照順序做，每一步做完再做下一步。
 
 ---

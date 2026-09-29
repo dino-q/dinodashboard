@@ -1,0 +1,34 @@
+name: Cron Job Guardian
+
+on:
+  schedule:
+    # cron-job.org free API defaults to 100 calls/day. Twice hourly uses 48 GETs/day.
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cron-job-guardian
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Re-enable recovered keepalive job
+        env:
+          CRON_JOB_ORG_API_KEY: ${{ secrets.CRON_JOB_ORG_API_KEY }}
+          GUARDIAN_HEALTH_URL: https://dinodashboard.onrender.com/ping-db
+          GUARDIAN_JOB_TITLE: DinoDashboard Keepalive
+        run: python scripts/cron_job_guardian.py
