@@ -24,6 +24,18 @@ class GuardianError(RuntimeError):
     """Expected guardian failure with a user-readable message."""
 
 
+def report_error(message: str) -> None:
+    """Expose a safe failure reason in GitHub Actions without leaking secrets."""
+    print(f"守門員未修復：{message}", file=sys.stderr)
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        escaped = (
+            message.replace("%", "%25")
+            .replace("\r", "%0D")
+            .replace("\n", "%0A")
+        )
+        print(f"::error title=Cron Job Guardian::{escaped}", file=sys.stderr)
+
+
 def request_json(
     url: str,
     *,
@@ -135,7 +147,7 @@ def main() -> int:
             )
         )
     except GuardianError as exc:
-        print(f"守門員未修復：{exc}", file=sys.stderr)
+        report_error(str(exc))
         return 1
     return 0
 
