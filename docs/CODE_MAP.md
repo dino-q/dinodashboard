@@ -14,3 +14,4 @@
 | 檔案 | 用途 |
 |---|---|
 | `.github/workflows/cron-job-guardian.yml` | 每 30 分鐘巡檢並執行自動修復，也支援手動執行 |
+| `scripts/update_distributor_test_launch.py` → `reconciled_commands()` | 🆕 精確補／更新「經銷商管理系統(HTML)」卡片的兩個測試入口；沿用 `get_tool()` 與 Supabase `tools.commands` 單欄更新，不改其他卡片或欄位。預設預覽，`--apply` 寫入並讀回核對。 |
