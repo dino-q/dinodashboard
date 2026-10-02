@@ -22,7 +22,8 @@ TEST_BAT = (r"C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife"
             r"\Distributor_MainData_Claudecode\啟動測試.bat")
 TEST_URL = "http://localhost:8001/?env=staging"
 TARGETS = [
-    {"label": "測試：啟動伺服器（8001）", "cmd": TEST_BAT, "env": "bat", "pinned": True},
+    # env=bat 會被伺服器總管另列一項；測試入口留在同一張工具卡即可。
+    {"label": "測試：啟動伺服器（8001）", "cmd": TEST_BAT, "env": "local", "pinned": True},
     {"label": "測試：開啟網頁", "cmd": TEST_URL, "env": "local", "pinned": True},
 ]
 
