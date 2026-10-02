@@ -1,4 +1,4 @@
-"""只更新經銷商管理系統卡片的測試啟動／測試網址指令。
+"""讓經銷商管理系統卡片沿用既有 8000 伺服器，修正測試網址。
 
 預設唯讀預覽；加 --apply 才寫入 Supabase 的 tools.commands。
 """
@@ -18,19 +18,19 @@ from data.supabase_client import get_client  # noqa: E402
 from data.tools import get_tool  # noqa: E402
 
 CARD_ID = "db9eb78329624c7fa7d30dd4b5bd2941"
-TEST_BAT = (r"C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife"
-            r"\Distributor_MainData_Claudecode\啟動測試.bat")
-TEST_URL = "http://localhost:8001/?env=staging"
+OLD_TEST_BAT = (r"C:\Users\AG_Di\Desktop\automation\Claude_code\AGlife"
+                r"\Distributor_MainData_Claudecode\啟動測試.bat")
+TEST_URL = "http://localhost:8000/?env=staging"
 TARGETS = [
-    # env=bat 會被伺服器總管另列一項；測試入口留在同一張工具卡即可。
-    {"label": "測試：啟動伺服器（8001）", "cmd": TEST_BAT, "env": "local", "pinned": True},
     {"label": "測試：開啟網頁", "cmd": TEST_URL, "env": "local", "pinned": True},
 ]
 
 
 def reconciled_commands(commands):
-    """只替換本工具管理的兩筆；保留卡片其餘指令與順序。"""
-    result = [dict(item) for item in commands]
+    """移除先前誤加的 8001 啟動鈕，更新測試網址；保留其餘指令。"""
+    result = [dict(item) for item in commands
+              if not (item.get("label") == "測試：啟動伺服器（8001）"
+                      and item.get("cmd") == OLD_TEST_BAT)]
     for target in TARGETS:
         matches = [i for i, item in enumerate(result)
                    if item.get("label") == target["label"] or item.get("cmd") == target["cmd"]]
