@@ -473,6 +473,17 @@ def server_list():
     return _server_response()
 
 
+@bp.route("/local", methods=["GET"])
+@private_read_guard
+def local_list():
+    """重繪「本地」分頁內容（port → 工具對照）。
+
+    切到「本地」分頁時前端會打這支：這一塊原本只在整頁載入時產生，
+    從頁面外（腳本、另一台裝置）新增的卡片不會自己出現。♻️ 沿用 build_local_map 與 _local_list.html。
+    """
+    return render_template("partials/_local_list.html", local_map=build_local_map(load_tools()))
+
+
 @bp.route("/server/<bat_key>/toggle", methods=["POST"])
 @editor_required
 def server_toggle(bat_key):

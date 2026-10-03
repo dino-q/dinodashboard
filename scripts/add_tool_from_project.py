@@ -52,7 +52,7 @@ try:
 except ImportError:
     pass
 
-from data.tools import add_tool, get_tool, load_categories, update_tool  # noqa: E402
+from data.tools import add_tool, get_tool, load_categories, load_tools, update_tool  # noqa: E402
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -92,6 +92,27 @@ def to_form(card: dict) -> dict:
     return form
 
 
+def _norm_path(p: str) -> str:
+    return (p or "").strip().replace("/", "\\").rstrip("\\").lower()
+
+
+def find_duplicates(card: dict) -> list[dict]:
+    """找「id 不同、但其實是同一個專案」的既有卡片：資料夾路徑或中文名稱相同。
+
+    只比 id 會漏：手動建的卡片 id 是隨機亂碼，這裡自取的 id 一定撞不到，
+    2026-09-23「經銷FAQ機器人」就這樣多出第二張。
+    """
+    path, name = _norm_path(card.get("path", "")), (card.get("name_zh") or "").strip()
+    hits = []
+    for t in load_tools():
+        if t.get("id") == card.get("id"):
+            continue
+        if (path and _norm_path(t.get("path", "")) == path) or \
+           (name and (t.get("name_zh") or "").strip() == name):
+            hits.append(t)
+    return hits
+
+
 def describe(card: dict, exists: dict | None) -> None:
     cats = {c["id"]: c.get("name_zh", c["id"]) for c in load_categories()}
     cat = card.get("category", "utility")
@@ -115,7 +136,7 @@ def describe(card: dict, exists: dict | None) -> None:
     print("  " + "-" * 64)
     if exists:
         print(f"  ⚠️ id「{card.get('id')}」已經存在（現在叫「{exists.get('name_zh')}」）。")
-        print("     要覆蓋請加 --update，否則 add 會自動改用不重複的新 id。")
+        print("     要覆蓋請加 --update；沒加 --update 的 --apply 會停下來不寫。")
     print()
 
 
@@ -124,6 +145,8 @@ def main() -> int:
     ap.add_argument("card_json", help="卡片 JSON 檔路徑")
     ap.add_argument("--apply", action="store_true", help="真的寫入；不加只是預覽")
     ap.add_argument("--update", action="store_true", help="id 已存在時覆蓋既有卡片")
+    ap.add_argument("--allow-duplicate", action="store_true",
+                    help="已有同資料夾／同名卡片時仍要另建一張")
     args = ap.parse_args()
 
     card = json.loads(Path(args.card_json).read_text(encoding="utf-8"))
@@ -133,6 +156,24 @@ def main() -> int:
 
     exists = get_tool(card["id"]) if card.get("id") else None
     describe(card, exists)
+
+    # 同 id 卻沒加 --update：add_tool() 會自動改成 <id>-2 另建，等於同一張卡兩份
+    if exists and not args.update and args.apply and not args.allow_duplicate:
+        print("  已停止，什麼都沒寫。要覆蓋那張請加 --update。")
+        return 1
+
+    # --update 時也要查：改過的 path／名稱可能撞到「另一張」卡（find_duplicates 已排除自己）
+    dups = find_duplicates(card)
+    if dups:
+        print("  ⚠️ 儀表板已經有同一個專案的卡片（資料夾或中文名稱相同）：")
+        for t in dups:
+            print(f"     id={t['id']}  {t.get('name_zh')}  {t.get('path') or ''}")
+        print("     要更新那張：把 JSON 的 id 改成上面那個 id，再加 --update。")
+        print("     確定兩張並存沒問題：加 --allow-duplicate。")
+        if args.apply and not args.allow_duplicate:
+            print("  已停止，什麼都沒寫。")
+            return 1
+        print()
 
     if not args.apply:
         print("  這是預覽，什麼都沒寫。確認無誤後加 --apply 再跑一次。")

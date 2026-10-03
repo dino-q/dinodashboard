@@ -641,6 +641,17 @@ function getViewMode() {
 function setViewMode(mode) {
   localStorage.setItem(_viewKey(), mode);
   applyViewMode(mode);
+  refreshSideView(mode);
+}
+
+// 「本地」「伺服器」兩塊原本只在整頁載入時產生一次，切分頁只是切顯示（display），不會重抓。
+// 卡片區則會因為篩選／搜尋走 HTMX 重新讀資料庫，所以從頁面外新增的卡片
+// （例如 /project-link-sync 的腳本直接寫 Supabase）會出現在卡片區、卻不在這兩個分頁（Dino 2026-10-04 回報）。
+// 每次切到這兩個分頁就重抓一次最新清單；只在使用者切換時做，不掛在 applyViewMode（它在每次卡片重繪後都會被呼叫）。
+function refreshSideView(mode) {
+  if (!window.htmx) return;
+  if (mode === 'local') htmx.ajax('GET', '/api/local', { target: '#local-view', swap: 'innerHTML' });
+  else if (mode === 'server') htmx.ajax('GET', '/api/server', { target: '#server-view', swap: 'innerHTML' });
 }
 
 function applyViewMode(mode) {
@@ -1111,6 +1122,7 @@ applyViewMode(getViewMode());
 document.body.addEventListener('htmx:afterSwap', (e) => {
   const tgt = e.detail && e.detail.target;
   if (tgt && tgt.id === 'tool-grid') applyViewMode(getViewMode());
+  if (tgt && tgt.id === 'local-view' && window.lucide) window.lucide.createIcons(); // 本地分頁重抓後補畫圖示
 });
 
 

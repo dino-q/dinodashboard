@@ -39,3 +39,6 @@ static/screenshots/*
 
 # 含公司 Notion 頁面 ID 的底稿，這是公開 repo，只留在本機（見 GIT_PUBLISH.md）
 docs/project-link-sync_Notion寫入草稿.md
+
+# 刪卡／合併卡片前的整列備份（含個人資料，只留本機）
+data/backups/
