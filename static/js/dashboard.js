@@ -2590,60 +2590,101 @@ document.addEventListener('keydown', (e) => {
 })();
 
 
-// ---------- Card detail preload — hover 預載，點開卡片零往返 ----------
-// 每次點卡片原本都要跑一趟 Render + Supabase（幾百 ms 的「開卡片卡卡的」主因）。
-// 滑鼠在卡片上停留 ≥120ms 就先把 /detail 抓回來放記憶體；真的點下去時攔掉
-// HTMX 請求、直接塞快取內容。任何 #tool-grid swap（編輯/加星/刪除/篩選）都會
-// 清空快取，不會看到編輯前的舊資料。
+// ---------- Card detail preload — 預載卡片詳情，點開卡片少等一趟 ----------
+// 每次點卡片原本都要跑一趟 Render（美國）+ Supabase（幾百 ms 的「開卡片卡卡的」主因）。
+// 兩個時機先把 /detail 抓回來放記憶體：
+//   (1) 滑鼠在卡片上停留 ≥120ms
+//   (2) 按下去的瞬間（pointerdown：滑鼠按下 / 手指碰到）—— 比 click 早約 100ms，
+//       而且手機、平板沒有 hover，只能靠這個（Dino 2026-11-01 回報開卡片要等）。
+// 真的點下去時攔掉 HTMX 請求：
+//   - 已抓好 → 直接塞快取內容（零往返）
+//   - 還在抓 → 等那一趟抓完再塞，不重發第二次請求（舊版這裡會重抓，等於白等）
+//   - 抓失敗 → 退回原本的 HTMX 請求（401／錯誤處理照舊）
+// 任何 #tool-grid swap（編輯/加星/刪除/篩選）都會清空快取，不會看到編輯前的舊資料。
 (() => {
-  const cache = new Map();          // toolId -> html（null = 抓取中）
+  const cache = new Map();          // toolId -> html（已抓好）
+  const inflight = new Map();       // toolId -> Promise<html>（抓取中）
   let epoch = 0;                    // 快取世代 — 防「清空後、還在飛的舊 fetch 把舊資料種回來」
+  let openSeq = 0;                  // 每次 #modal-content 請求 +1 — 等待中使用者改開別的就作廢
   let hoverTimer = null;
+
+  function prefetch(id) {
+    if (cache.has(id)) return Promise.resolve(cache.get(id));
+    if (inflight.has(id)) return inflight.get(id);
+    const myEpoch = epoch;          // 這筆 fetch 屬於發出當下的世代
+    // HX-Request header 必帶：PRIVATE_MODE 下 session 失效時 _deny 才會回 401
+    // 而不是 302 → fetch follow → 把 /login 整頁 HTML 當 detail 快取進 modal
+    const p = fetch(`/api/tool/${id}/detail`, { headers: { 'HX-Request': 'true' } })
+      .then(r => (r.ok ? r.text() : Promise.reject(new Error('detail ' + r.status))))
+      .then(html => {
+        if (myEpoch !== epoch) throw new Error('stale');   // 期間資料有變動，作廢
+        cache.set(id, html);
+        return html;
+      })
+      .finally(() => { if (inflight.get(id) === p) inflight.delete(id); });
+    p.catch(() => {});              // 沒人等的預載失敗不要噴 unhandled rejection
+    inflight.set(id, p);
+    return p;
+  }
+
+  function swapDetail(tgt, html) {
+    tgt.innerHTML = html;
+    // 走捷徑不會觸發 htmx:afterSwap/afterSettle，該做的初始化自己補：
+    // htmx 只會處理它自己 swap 進來的內容 —— 手動塞的 DOM 一定要 htmx.process()
+    // 否則 detail 裡的「編輯」鈕（hx-get）會完全沒反應且零錯誤訊息
+    if (window.htmx) htmx.process(tgt);
+    lucide.createIcons();
+    detailCarouselInit();
+  }
 
   document.body.addEventListener('mouseover', (e) => {
     const card = e.target.closest('.project-card[data-tool-id]');
     if (!card) return;
     const id = card.dataset.toolId;
-    if (cache.has(id)) return;
+    if (cache.has(id) || inflight.has(id)) return;
     clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => {
-      if (cache.has(id)) return;
-      cache.set(id, null);          // in-flight 標記，防重複抓
-      const myEpoch = epoch;        // 這筆 fetch 屬於發出當下的世代
-      // HX-Request header 必帶：PRIVATE_MODE 下 session 失效時 _deny 才會回 401
-      // 而不是 302 → fetch follow → 把 /login 整頁 HTML 當 detail 快取進 modal
-      fetch(`/api/tool/${id}/detail`, { headers: { 'HX-Request': 'true' } })
-        .then(r => (r.ok ? r.text() : Promise.reject()))
-        .then(html => { if (myEpoch === epoch) cache.set(id, html); })
-        .catch(() => { if (myEpoch === epoch) cache.delete(id); });
-    }, 120);
+    hoverTimer = setTimeout(() => prefetch(id), 120);
   });
 
-  // 命中快取 → 取消 HTMX 請求、直接 swap。
+  // 按下去當下就開抓（手機唯一的預載時機；桌機則補上「移過去馬上點」的情況）
+  document.body.addEventListener('pointerdown', (e) => {
+    const card = e.target.closest('.project-card[data-tool-id]');
+    if (card) prefetch(card.dataset.toolId);
+  }, { passive: true });
+
   // 註：此 listener 必須註冊在「modal loading placeholder」的 beforeRequest 之後
-  //（本檔案較前面那個），placeholder 先寫入、這裡再覆蓋成真內容。
+  //（本檔案較前面那個），placeholder 先寫入轉圈圈、這裡再覆蓋成真內容。
   document.body.addEventListener('htmx:beforeRequest', (e) => {
     const tgt = e.detail && e.detail.target;
     if (!tgt || tgt.id !== 'modal-content') return;
+    const mySeq = ++openSeq;        // 任何開 modal 的請求（含編輯、新增）都會讓之前的等待作廢
     const path = (e.detail.requestConfig && e.detail.requestConfig.path) || '';
     const m = path.match(/^\/api\/tool\/([^/]+)\/detail$/);
     if (!m) return;
-    const html = cache.get(m[1]);
-    if (!html) return;              // 沒抓到（或還在抓）→ 走原本的 HTMX 請求
-    e.preventDefault();
-    tgt.innerHTML = html;
-    // 走捷徑不會觸發 htmx:afterSwap/afterSettle，該做的初始化自己補：
-    // (1) htmx 只會處理它自己 swap 進來的內容 —— 手動塞的 DOM 一定要 htmx.process()
-    //     否則 detail 裡的「編輯」鈕（hx-get）會完全沒反應且零錯誤訊息
-    if (window.htmx) htmx.process(tgt);
-    lucide.createIcons();
-    detailCarouselInit();
+    const id = m[1];
+    if (cache.has(id)) { e.preventDefault(); swapDetail(tgt, cache.get(id)); return; }
+    const p = inflight.get(id);
+    if (!p) return;                 // 沒預載過 → 走原本的 HTMX 請求
+    e.preventDefault();             // 已經在抓 → 不重發，等它（轉圈圈已由 placeholder 顯示）
+    const overlayOpen = () => {
+      const ov = document.getElementById('modal-overlay');
+      return ov && ov.classList.contains('open');
+    };
+    p.then(html => {
+      if (mySeq === openSeq && overlayOpen()) swapDetail(tgt, html);
+    }).catch(() => {
+      // 預載失敗（含 401、資料剛變動作廢）→ 退回原本的 HTMX 請求，錯誤處理照舊
+      if (mySeq === openSeq && overlayOpen() && window.htmx) {
+        htmx.ajax('GET', path, { target: tgt, swap: 'innerHTML' });
+      }
+    });
   });
 
   // 資料有變動的所有路徑都會重繪 #tool-grid → 以此作為快取失效訊號。
   // epoch++ 讓還在飛的舊 fetch 作廢（resolve 回來發現世代不符就不落地）。
   document.body.addEventListener('htmx:afterSwap', (e) => {
     const tgt = e.detail && e.detail.target;
-    if (tgt && tgt.id === 'tool-grid') { epoch++; cache.clear(); }
+    // #server-view：伺服器分頁「一起封存卡片」會改卡片狀態，但只重繪伺服器分頁。
+    if (tgt && (tgt.id === 'tool-grid' || tgt.id === 'server-view')) { epoch++; cache.clear(); inflight.clear(); }
   });
 })();
